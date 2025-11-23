@@ -3,8 +3,7 @@
 #' Upsert embeddings into a vector store
 #'
 #' Generic interface for inserting or updating vector embeddings
-#' into a named collection. This function should delegate to a
-#' backend-specific implementation (e.g., Chroma).
+#' into a named collection. Currently delegates to the Chroma backend.
 #'
 #' @param collection Character; name of the collection.
 #' @param ids Character vector of IDs, one for each embedding.
@@ -21,7 +20,28 @@ vectorstore_upsert <- function(
   documents,
   metadatas = NULL
 ) {
-  stop("vectorstore_upsert() not implemented yet.")
+  # Basic validation
+  n <- length(ids)
+  if (nrow(embeddings) != n) {
+    stop("embeddings must have one row per id.", call. = FALSE)
+  }
+  if (length(documents) != n) {
+    stop("documents must have length equal to length(ids).", call. = FALSE)
+  }
+  if (!is.null(metadatas) && length(metadatas) != n) {
+    stop("metadatas must have length equal to length(ids).", call. = FALSE)
+  }
+
+  # Delegate to Chroma backend (can be swapped later if needed)
+  chroma_upsert(
+    collection = collection,
+    ids        = ids,
+    embeddings = embeddings,
+    documents  = documents,
+    metadatas  = metadatas
+  )
+
+  invisible(TRUE)
 }
 
 #' Query a vector store for nearest neighbors
@@ -40,7 +60,11 @@ vectorstore_query <- function(
   query_embedding,
   top_k = 4L
 ) {
-  stop("vectorstore_query() not implemented yet.")
+  chroma_query(
+    collection      = collection,
+    query_embedding = query_embedding,
+    top_k           = top_k
+  )
 }
 
 #' Delete a collection from the vector store
@@ -50,5 +74,6 @@ vectorstore_query <- function(
 #' @return Invisibly, TRUE on success.
 #' @export
 vectorstore_delete_collection <- function(collection) {
-  stop("vectorstore_delete_collection() not implemented yet.")
+  chroma_delete_collection(collection)
+  invisible(TRUE)
 }
