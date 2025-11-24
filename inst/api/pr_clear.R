@@ -8,6 +8,7 @@ library(ragR)
 #* This endpoint deletes a collection from the underlying vector store.
 # ZHILI LU WROTE THIS
 # test the push
+# Aimal made this small comment
 #* Example JSON body:
 #* {
 #*   "collection": "demo_collection"
