@@ -3,15 +3,9 @@
 #* @apiTitle ragR API
 #* @apiDescription RAG and RAGAS backend in R (OpenAI + Chroma)
 
-library(plumber)
+# Get the directory where THIS file lives
+api_dir <- dirname(sys.frame(1)$ofile)
 
-# Create a new Plumber router and load endpoint files
-pr <- pr() |>
-  pr_set_serializer(serializer_json()) |>
-  pr_load("pr_ingest.R") |>
-  pr_load("pr_chat.R")
-  # Later we can add:
-  # |> pr_load("pr_clear.R")
-  # |> pr_load("pr_ragas.R")
-
-pr
+source(file.path(api_dir, "pr_ingest.R"))
+source(file.path(api_dir, "pr_chat.R"))
+source(file.path(api_dir, "pr_clear.R"))
