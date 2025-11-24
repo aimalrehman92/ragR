@@ -6,7 +6,7 @@ library(ragR)
 #* Clear a vector store collection ("memory")
 #*
 #* This endpoint deletes a collection from the underlying vector store.
-#*
+# ZHILI LU WROTE THIS
 #* Example JSON body:
 #* {
 #*   "collection": "demo_collection"
