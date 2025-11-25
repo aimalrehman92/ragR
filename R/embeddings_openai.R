@@ -1,3 +1,4 @@
+
 #' Get embeddings from OpenAI
 #'
 #' This function calls the OpenAI embeddings endpoint to obtain
@@ -66,9 +67,14 @@ get_openai_embeddings <- function(
   emb_mat <- do.call(rbind, emb_list)
 
   # Ensure it's numeric
-  emb_mat <- apply(emb_mat, 2, as.numeric)
+  storage.mode(emb_mat) <- "double"
 
-  return(emb_mat)
+  # If only one embedding, `emb_mat` might have lost its dim; fix to 1-row matrix
+  if (is.null(dim(emb_mat))) {
+    emb_mat <- matrix(emb_mat, nrow = 1)
+  }
+
+  emb_mat
 }
 
 
@@ -134,7 +140,6 @@ generate_openai_chat <- function(
 
   status <- httr2::resp_status(resp)
   if (status >= 300) {
-    # Try to grab a helpful message, but don't break if format changes
     msg <- NULL
     try({
       parsed_err <- httr2::resp_body_json(resp, simplifyVector = TRUE)
@@ -150,17 +155,30 @@ generate_openai_chat <- function(
     )
   }
 
-  parsed <- httr2::resp_body_json(resp, simplifyVector = TRUE)
+  # Parse WITHOUT simplifying to vectors, to keep list structure predictable
+  parsed <- httr2::resp_body_json(resp, simplifyVector = FALSE)
 
-  if (is.null(parsed$choices) || length(parsed$choices) == 0L) {
-    stop("Unexpected response format from OpenAI chat API.", call. = FALSE)
+  choices <- parsed$choices
+  if (is.null(choices) || length(choices) == 0L) {
+    stop("Unexpected response format from OpenAI chat API: no choices.", call. = FALSE)
   }
 
-  answer <- parsed$choices[[1]]$message$content
+  first_choice <- choices[[1]]
 
-  if (is.null(answer)) {
-    stop("OpenAI chat API returned no message content.", call. = FALSE)
+  # For the standard Chat Completions API:
+  message_obj <- first_choice$message
+
+  # message_obj can be a list with a 'content' field, or in some edge cases
+  # a simple character. Handle both.
+  if (is.list(message_obj) && !is.null(message_obj$content)) {
+    answer <- message_obj$content
+  } else if (is.character(message_obj)) {
+    answer <- message_obj
+  } else {
+    stop("OpenAI chat API returned an unexpected message structure.", call. = FALSE)
   }
 
   as.character(answer)
 }
+
+

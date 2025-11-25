@@ -20,6 +20,7 @@ ingest_documents <- function(
   chunk_size      = 500L,
   chunk_overlap   = 50L,
   embedding_model = "text-embedding-3-small",
+  use_openai      = TRUE,     # ← MUST exist here
   verbose         = TRUE
 ) {
   if (!is.character(paths)) {
@@ -76,10 +77,15 @@ ingest_documents <- function(
 
   # 2) Compute embeddings for all chunks -----------------------------------
 
+  if (use_openai) {
   embeddings <- get_openai_embeddings(
     texts = chunks_df$text,
     model = embedding_model
   )
+} else {
+  if (verbose) message("Using dummy embeddings (no OpenAI call).")
+  embeddings <- dummy_embeddings(chunks_df$text, dim = 16L)
+}
 
   # 3) Build metadata list for each chunk ----------------------------------
 
