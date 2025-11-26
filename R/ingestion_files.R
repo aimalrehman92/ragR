@@ -5,14 +5,16 @@
 #' Reads PDF, DOCX, or TXT files, extracts text, chunks it, embeds chunks,
 #' and stores them in a vector store collection.
 #'
-#' @param paths Character vector of file paths.
-#' @param collection Name of the vector store collection.
-#' @param chunk_size Approximate size of each chunk (characters).
-#' @param chunk_overlap Overlap between chunks (characters).
-#' @param embedding_model OpenAI embedding model name.
-#' @param verbose Whether to print progress messages.
+#' @param paths Character vector of file paths to ingest.
+#' @param collection Character scalar; name of the collection.
+#' @param chunk_size Integer; target chunk size (in characters or tokens).
+#' @param chunk_overlap Integer; overlap between consecutive chunks.
+#' @param embedding_model Character; OpenAI embedding model name.
+#' @param use_openai Logical; if TRUE, use OpenAI embeddings. If FALSE,
+#'   use a local dummy embedding generator (for offline development / tests).
+#' @param verbose Logical; if TRUE, log progress messages.
 #'
-#' @return A tibble summarizing ingestion results (one row per file).
+#' @return Invisibly, a tibble with chunk IDs and paths (or similar).
 #' @export
 ingest_documents <- function(
   paths,
