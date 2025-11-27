@@ -134,3 +134,33 @@ api_clear_handler <- function(body) {
   )
 }
 
+
+#' API handler: compute RAGAS metrics and summary from saved QA log
+#'
+#' This function is intended to be called from an HTTP endpoint. It loads
+#' the QA log from disk (via [load_qa_log()]), computes RAGAS-style
+#' metrics (via [compute_ragas_metrics()]) and a summary (via
+#' [summarize_ragas()]), and returns a list that can be serialized as JSON.
+#'
+#' @param path Character scalar; path to the QA log RDS file. Defaults to
+#'   `"db/qa_log.rds"`.
+#'
+#' @return A list with elements:
+#'   - `status`: "ok"
+#'   - `n_qa`: number of rows in the QA log
+#'   - `metrics`: a data frame of per-QA metrics
+#'   - `summary`: a data frame of summary statistics per metric
+#' @export
+api_ragas_handler <- function(path = "db/qa_log.rds") {
+  qa_log <- load_qa_log(path)
+
+  metrics <- compute_ragas_metrics(qa_log)
+  summary <- summarize_ragas(metrics)
+
+  list(
+    status  = "ok",
+    n_qa    = nrow(qa_log),
+    metrics = metrics,
+    summary = summary
+  )
+}
