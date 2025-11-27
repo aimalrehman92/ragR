@@ -98,3 +98,49 @@ plot_ragas_overall <- function(
     ylab   = "Frequency"
   )
 }
+
+#' Plot mean RAGAS-style metrics as a bar chart
+#'
+#' This convenience function computes summary statistics via
+#' [summarize_ragas()] and then draws a bar chart of the mean value for
+#' each metric using base R graphics. It is useful for quickly comparing
+#' how different metrics behave on a given QA log.
+#'
+#' @param qa_metrics A tibble returned by [compute_ragas_metrics()].
+#' @param main Optional main title for the plot.
+#' @param ylim Optional y-axis limits. If `NULL`, defaults to c(0, 1).
+#'
+#' @return Invisibly, the result of [graphics::barplot()].
+#' @export
+plot_ragas_means <- function(
+  qa_metrics,
+  main = "Mean RAGAS-style metrics",
+  ylim = c(0, 1)
+) {
+  if (is.null(qa_metrics) || nrow(qa_metrics) == 0L) {
+    warning("qa_metrics is empty; nothing to plot.", call. = FALSE)
+    return(invisible(NULL))
+  }
+
+  summary_tbl <- summarize_ragas(qa_metrics)
+
+  if (nrow(summary_tbl) == 0L) {
+    warning("summarize_ragas() returned no metrics to plot.", call. = FALSE)
+    return(invisible(NULL))
+  }
+
+  means  <- summary_tbl$mean
+  names(means) <- summary_tbl$metric
+
+  if (is.null(ylim)) {
+    ylim <- range(c(0, means), na.rm = TRUE)
+  }
+
+  graphics::barplot(
+    height = means,
+    main   = main,
+    ylab   = "Mean metric value",
+    ylim   = ylim
+  )
+}
+
