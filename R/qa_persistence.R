@@ -99,3 +99,45 @@ load_qa_metrics <- function(path = "db/qa_metrics.rds") {
 
   obj
 }
+
+
+#' Clear the QA log on disk
+#'
+#' This helper overwrites the QA log file with an empty QA log (as
+#' created by [qa_log_empty()]). It is intended for starting a fresh
+#' evaluation session.
+#'
+#' @param path Character scalar; path to the QA log RDS file. Defaults
+#'   to `"db/qa_log.rds"`.
+#'
+#' @return Invisibly, the path to the saved file.
+#' @export
+clear_qa_log <- function(path = "db/qa_log.rds") {
+  log <- qa_log_empty()
+  dir_path <- dirname(path)
+  if (!dir.exists(dir_path)) {
+    dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+  }
+  saveRDS(log, file = path)
+  invisible(path)
+}
+
+#' Clear QA metrics on disk
+#'
+#' This helper overwrites the QA metrics file with an empty metrics
+#' tibble (as created by [qa_metrics_empty()]).
+#'
+#' @param path Character scalar; path to the QA metrics RDS file.
+#'   Defaults to `"db/qa_metrics.rds"`.
+#'
+#' @return Invisibly, the path to the saved file.
+#' @export
+clear_qa_metrics <- function(path = "db/qa_metrics.rds") {
+  metrics <- qa_metrics_empty()
+  dir_path <- dirname(path)
+  if (!dir.exists(dir_path)) {
+    dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+  }
+  saveRDS(metrics, file = path)
+  invisible(path)
+}

@@ -1,0 +1,6 @@
+"metric","mean","sd","min","max"
+"context_precision",0,NA,0,0
+"context_recall",0,NA,0,0
+"answer_relevance",0,NA,0,0
+"faithfulness",0,NA,0,0
+"ragas_overall",0,NA,0,0

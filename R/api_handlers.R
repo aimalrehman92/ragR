@@ -164,3 +164,60 @@ api_ragas_handler <- function(path = "db/qa_log.rds") {
     summary = summary
   )
 }
+
+#' API handler: generate RAGAS performance report
+#'
+#' This handler is intended to be called from an HTTP endpoint. It
+#' generates RAGAS-style metrics based on the saved QA log, writes a
+#' summary table (CSV) and a bar chart image (PNG) to disk, and returns
+#' a small list with paths and status information.
+#'
+#' @param qa_log_path Character scalar; path to the QA log RDS file.
+#'   Defaults to `"db/qa_log.rds"`.
+#' @param qa_metrics_path Character scalar; path to the QA metrics RDS
+#'   file. Defaults to `"db/qa_metrics.rds"`.
+#' @param output_dir Character scalar; directory where the summary CSV
+#'   and PNG image will be written. Defaults to `"reports/ragas"`.
+#'
+#' @return A list suitable for JSON serialization, with elements:
+#'   `status`, `n_qa`, `qa_metrics_path`, `summary_csv_path`, `plot_path`.
+#' @export
+api_ragas_report_handler <- function(
+  qa_log_path     = "db/qa_log.rds",
+  qa_metrics_path = "db/qa_metrics.rds",
+  output_dir      = "reports/ragas"
+) {
+  generate_ragas_report(
+    qa_log_path     = qa_log_path,
+    qa_metrics_path = qa_metrics_path,
+    output_dir      = output_dir
+  )
+}
+
+#' API handler: clear QA log and QA metrics
+#'
+#' This handler overwrites the QA log and QA metrics files on disk with
+#' empty tibbles, effectively resetting the evaluation state.
+#'
+#' @param qa_log_path Character scalar; path to the QA log RDS file.
+#'   Defaults to `"db/qa_log.rds"`.
+#' @param qa_metrics_path Character scalar; path to the QA metrics RDS
+#'   file. Defaults to `"db/qa_metrics.rds"`.
+#'
+#' @return A list with elements `status`, `qa_log_path`, and
+#'   `qa_metrics_path`, suitable for JSON serialization.
+#' @export
+api_ragas_clear_handler <- function(
+  qa_log_path     = "db/qa_log.rds",
+  qa_metrics_path = "db/qa_metrics.rds"
+) {
+  clear_qa_log(qa_log_path)
+  clear_qa_metrics(qa_metrics_path)
+
+  list(
+    status          = "ok",
+    qa_log_path     = qa_log_path,
+    qa_metrics_path = qa_metrics_path
+  )
+}
+
