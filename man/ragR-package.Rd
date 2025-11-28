@@ -32,6 +32,8 @@ Wraps the OpenAI REST API for embeddings (e.g.
 \item \strong{Vector Store (\code{vectorstore_interface.R})}
 Implements an R-native vector store using tibbles and numeric matrices,
 with functions to add, query, and clear stored embeddings.
+Also includes \code{vectorstore_clear_all()} for wiping the entire vector store
+in one operation.
 \item \strong{RAG Pipeline (\code{rag_pipeline.R})}
 Given a user question, the pipeline:
 \enumerate{
@@ -82,6 +84,9 @@ Computes metrics from the QA log, saves the metrics and report
 artifacts to disk, and returns a small summary object.
 \item \code{POST /ragas/clear}
 Clears the QA log, QA metrics, and report files.
+\item \code{POST /clear_all}
+Clears the entire vector store (all collections). Uses
+\code{\link[=api_clear_all_handler]{api_clear_all_handler()}}, which calls \code{\link[=vectorstore_clear_all]{vectorstore_clear_all()}}.
 }
 }
 

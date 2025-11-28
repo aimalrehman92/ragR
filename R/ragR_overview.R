@@ -27,6 +27,8 @@
 #' - **Vector Store (`vectorstore_interface.R`)**  
 #'   Implements an R-native vector store using tibbles and numeric matrices,
 #'   with functions to add, query, and clear stored embeddings.
+#'   Also includes `vectorstore_clear_all()` for wiping the entire vector store
+#'   in one operation.
 #'
 #' - **RAG Pipeline (`rag_pipeline.R`)**  
 #'   Given a user question, the pipeline:
@@ -81,6 +83,10 @@
 #' - `POST /ragas/clear`  
 #'   Clears the QA log, QA metrics, and report files.
 #'
+#' - `POST /clear_all`  
+#'   Clears the entire vector store (all collections). Uses
+#'   [api_clear_all_handler()], which calls [vectorstore_clear_all()].
+
 #' @section Usage:
 #'
 #' Programmatic usage inside R:
