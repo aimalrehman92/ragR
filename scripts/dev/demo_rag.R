@@ -1,49 +1,42 @@
 # scripts/dev/demo_rag.R
 #
-# Minimal example of how the ragR package is intended to be used
-# as a library (without the HTTP API).
+# Purpose:
+#   Demonstrate how to query the RAG pipeline using an already-populated
+#   vector store (without using the HTTP API).
 #
 # Usage (from project root):
 #   Rscript scripts/dev/demo_rag.R
 #
-# NOTE:
-# - This is a skeleton. The functions currently stop with
-#   "not implemented yet" and will be filled in later.
+# Prerequisite:
+#   - Run scripts/dev/demo_ingest.R at least once to create the collection.
 
 library(ragR)
 
-# 1. Ingest some example documents -----------------------------------------
+# 1. Define the question and collection -----------------------------------------
 
-example_paths <- c(
-  "data-raw/example1.pdf",
-  "data-raw/example2.txt"
-)
+collection_name <- "demo_collection"
 
-ingestion_result <- ingest_documents(
-  paths          = example_paths,
-  collection     = "demo_collection",
-  chunk_size     = 500,
-  chunk_overlap  = 50,
-  embedding_model = "text-embedding-3-small",
-  verbose        = TRUE
-)
+question <- "What is this essay about? Summarize it in one or two sentences."
 
-print(ingestion_result)
+cat("Asking question via RAG:\n")
+cat("  ", question, "\n\n")
 
-# 2. Ask a question via the RAG pipeline -----------------------------------
-
-question <- "What are the key points discussed in the example documents?"
+# 2. Call the RAG pipeline ------------------------------------------------------
 
 rag_result <- query_rag(
   question        = question,
-  collection      = "demo_collection",
+  collection      = collection_name,
   top_k           = 4,
   embedding_model = "text-embedding-3-small",
   chat_model      = "gpt-4o-mini"
 )
 
-cat("\nAnswer:\n")
-cat(rag_result$answer, "\n")
+# 3. Display the answer ---------------------------------------------------------
 
-cat("\nRetrieved context (first few rows):\n")
+cat("Answer:\n")
+cat(rag_result$answer, "\n\n")
+
+# 4. Optionally show retrieved context -----------------------------------------
+
+cat("Retrieved context (first few rows):\n")
 print(utils::head(rag_result$retrieved))
