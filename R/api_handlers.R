@@ -221,3 +221,20 @@ api_ragas_clear_handler <- function(
   )
 }
 
+#' API handler: clear the entire vector store
+#'
+#' This handler wipes the R-native vector store by calling
+#' [vectorstore_clear_all()], removing all collections and stored
+#' embeddings.
+#'
+#' @return A list with elements `status` and `message`, suitable for
+#'   JSON serialization.
+#' @export
+api_clear_all_handler <- function() {
+  vectorstore_clear_all()
+
+  list(
+    status  = "ok",
+    message = "Vector store cleared: all collections removed."
+  )
+}

@@ -198,3 +198,21 @@ vectorstore_delete_collection <- function(collection) {
 
   invisible(TRUE)
 }
+
+#' Delete ALL collections from the vector store
+#'
+#' Completely wipes the vector store by replacing it with an empty tibble.
+#'
+#' @return Invisibly, TRUE
+#' @export
+vectorstore_clear_all <- function() {
+  empty <- tibble::tibble(
+    collection = character(),
+    id         = character(),
+    text       = character(),
+    embedding  = list(),
+    metadata   = list()
+  )
+  vectorstore_save(empty)
+  invisible(TRUE)
+}
