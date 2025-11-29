@@ -34,7 +34,7 @@ print(existing_paths)
 
 # 2. Run ingestion --------------------------------------------------------------
 
-collection_name <- "demo_collection"
+collection_name <- "default"
 
 ingestion_result <- ingest_documents(
   paths           = existing_paths,

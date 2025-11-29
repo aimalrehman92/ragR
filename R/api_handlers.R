@@ -84,6 +84,7 @@ api_chat_handler <- function(body) {
   embedding_model <- if (!is.null(body$embedding_model)) body$embedding_model else "text-embedding-3-small"
   chat_model      <- if (!is.null(body$chat_model))      body$chat_model      else "gpt-4o-mini"
 
+  # ---- Run the RAG pipeline ------------------------------------------------
   rag_res <- query_rag(
     question        = question,
     collection      = collection,
@@ -91,6 +92,24 @@ api_chat_handler <- function(body) {
     embedding_model = embedding_model,
     chat_model      = chat_model
   )
+
+  # ---- NEW: log this interaction into qa_log.rds ---------------------------
+  qa_log_path <- "db/qa_log.rds"
+
+  # load_qa_log() should create an empty log if file doesn't exist
+  qa_log <- load_qa_log(qa_log_path)
+
+  qa_log <- log_rag_interaction(
+    qa_log      = qa_log,
+    question    = question,
+    rag_result  = rag_res,
+    collection  = collection,
+    chat_model      = chat_model,
+    embedding_model = embedding_model
+  )
+
+  save_qa_log(qa_log, qa_log_path)
+  # --------------------------------------------------------------------------
 
   list(
     status    = "ok",
@@ -100,7 +119,6 @@ api_chat_handler <- function(body) {
     prompt    = rag_res$prompt
   )
 }
-
 
 #' API handler to clear a collection ("memory")
 #'
