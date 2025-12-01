@@ -16,7 +16,7 @@ library(ragR)
 # 1. Define which files to ingest ------------------------------------------------
 
 example_paths <- c(
-  "data-raw/happy_essay.txt"   # adjust or add more paths if needed
+  "data-raw/STAT_8670_Syllabus.txt"   # adjust or add more paths if needed
 )
 
 # Keep only the files that actually exist
@@ -24,7 +24,7 @@ existing_paths <- example_paths[file.exists(example_paths)]
 
 if (length(existing_paths) == 0L) {
   stop(
-    "No example files found. Please check that the paths exist under data-raw/ ",
+    "No data files found. Please check that the paths exist under data-raw/ ",
     call. = FALSE
   )
 }
