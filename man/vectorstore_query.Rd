@@ -16,11 +16,11 @@ vectorstore_query(collection, query_embedding, top_k = 4L)
 \value{
 A tibble with at least:
 \itemize{
-\item id
-\item text
-\item score (similarity)
-\item metadata
-\item collection
+\item \code{collection}
+\item \code{id}
+\item \code{text}
+\item \code{score} (similarity)
+\item \code{metadata}
 }
 }
 \description{

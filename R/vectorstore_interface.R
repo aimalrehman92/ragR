@@ -16,7 +16,16 @@ vectorstore_path <- function() {
   file.path("db", "vectorstore.rds")
 }
 
-# Internal helper: load the store (tibble), or empty tibble if none
+#' Load the R-native vector store
+#'
+#' This function loads the current contents of the R-native vector store
+#' from `db/vectorstore.rds`. If the file does not exist yet, it returns
+#' an empty tibble with the expected columns:
+#' `collection`, `id`, `text`, `embedding`, and `metadata`.
+#'
+#' @return A tibble with one row per stored chunk (or zero rows if the
+#'   store is empty).
+#' @export
 vectorstore_load <- function() {
   p <- vectorstore_path()
   if (!file.exists(p)) {
@@ -34,6 +43,7 @@ vectorstore_load <- function() {
 }
 
 # Internal helper: save the store
+# (kept internal; not exported)
 vectorstore_save <- function(store) {
   dir.create("db", showWarnings = FALSE, recursive = TRUE)
   saveRDS(store, vectorstore_path())
@@ -125,11 +135,11 @@ cosine_similarity <- function(emb_mat, q) {
 #' @param top_k Integer; number of neighbors to retrieve.
 #'
 #' @return A tibble with at least:
-#'   - id
-#'   - text
-#'   - score (similarity)
-#'   - metadata
-#'   - collection
+#'   - `collection`
+#'   - `id`
+#'   - `text`
+#'   - `score` (similarity)
+#'   - `metadata`
 #' @export
 vectorstore_query <- function(
   collection,

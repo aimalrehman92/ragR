@@ -25,7 +25,7 @@ existing_paths <- file_paths[file.exists(file_paths)]
 
 if (length(existing_paths) == 0L) {
   stop(
-    "No example files found. Please check paths under data-raw/",
+    "No files found. Please check paths under data-raw/",
     call. = FALSE
   )
 }
