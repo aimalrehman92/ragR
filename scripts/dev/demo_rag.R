@@ -14,9 +14,9 @@ library(ragR)
 
 # 1. Define the question and collection -----------------------------------------
 
-collection_name <- "demo_collection"
+collection_name <- "default"
 
-question <- "What is this essay about? Summarize it in one or two sentences."
+question <- "What is the withdrawal deadline for STAT 8581?"
 
 cat("Asking question via RAG:\n")
 cat("  ", question, "\n\n")
@@ -26,7 +26,7 @@ cat("  ", question, "\n\n")
 rag_result <- query_rag(
   question        = question,
   collection      = collection_name,
-  top_k           = 4,
+  top_k           = 5,
   embedding_model = "text-embedding-3-small",
   chat_model      = "gpt-4o-mini"
 )
