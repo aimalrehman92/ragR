@@ -28,3 +28,22 @@ get_env_or_stop <- function(name) {
   }
   value
 }
+
+attach_ground_truth_by_evalid <- function(qa_log, experiment_csv_path) {
+  gt <- readr::read_csv(experiment_csv_path, show_col_types = FALSE)
+
+  
+  gt2 <- gt |>
+    dplyr::transmute(
+      eval_id = as.character(eval_id),
+      answer_reference = as.character(`Ground Truth`)
+    )
+
+  qa_log |>
+    dplyr::mutate(eval_id = as.character(eval_id)) |>
+    dplyr::left_join(gt2, by = "eval_id", suffix = c("", "_gt")) |>
+    dplyr::mutate(
+      answer_reference = dplyr::coalesce(answer_reference_gt, answer_reference)
+    ) |>
+    dplyr::select(-answer_reference_gt)
+}
