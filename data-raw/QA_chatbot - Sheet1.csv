@@ -1,0 +1,21 @@
+eval_id,Document,Question,Ground Truth,Chatbot Answer
+Q0001,STAT 8581_Syllabus_Pidgeon,What percentage of the final grade in STAT 8581 comes from homework?,Homework counts for 40% of the final grade.,I don't know based on the provided context.
+Q0002,STAT8670_syllabus_Sep2,What software is required for STAT 8670?,STAT 8670 requires the R statistical software.,The required software for STAT 8670 is the R programming language and environment.
+Q0003,STAT 8581_Syllabus_Pidgeon,What is the withdrawal deadline for STAT 8581?,"The withdrawal deadline is October 24, 2025.","The withdrawal deadline for STAT 8581 is October 24, 2025."
+Q0004,STAT8670_syllabus_Sep2,Are generative AI tools such as ChatGPT allowed in STAT 8670?,"No, the syllabus explicitly states that all generative AI tools are prohibited unless approved.","No, generative AI tools such as ChatGPT are not allowed in STAT 8670 unless approved in advance."
+Q0005,STAT8670_syllabus_Sep2,When are the class meetings for STAT 8670?,The class meets Monday and Wednesday from 17:30 to 18:45.,The class meetings for STAT 8670 are on Monday and Wednesday from 17:30 to 18:45.
+Q0006,STAT 8581_Syllabus_Pidgeon.pdf,Who is the instructor for STAT 8581?,Dr. Brian Pidgeon,I don't know based on the provided context.
+Q0007,STAT8670_syllabus_Sep2,What are the office hours for STAT 8670?,Tuesdays and Wednesdays from 14:00–15:00.,The office hours for STAT 8670 are 14:00–15:00 on Tuesday and Wednesday.
+Q0008,STAT 8581_Syllabus_Pidgeon,How many homework assignments are there in STAT 8581?,There are 4 homework assignments.,There will be 4 homework assignments in STAT 8581.
+Q0009,STAT8670_syllabus_Sep2,What percentage of the STAT 8670 grade is the Final Project?,The Final Project counts for 30% of the final grade.,I don't know based on the provided context.
+Q0010,STAT 8581_Syllabus_Pidgeon,What is the class location for STAT 8581?,Aderhold 30,I don't know based on the provided context.
+Q0011,STAT8670_syllabus_Sep2,Are late homework submissions accepted in STAT 8670?,"No, late homework will not be accepted unless there is an officially documented emergency.","No, late homework submissions are not accepted in STAT 8670."
+Q0012,8581_Syllabus_Pidgeon.pdf,Which foundational topics are covered in STAT 8581?,"Method of moments, maximum likelihood, MVUE, sufficiency, Fisher information, Cramer–Rao bounds, statistical decision theory, and Bayes rules.",I don't know based on the provided context.
+Q0013,STAT8670_syllabus_Sep2,What programming language/software will STAT 8670 primarily use?,The R statistical software.,The programming language/software that STAT 8670 will primarily use is R.
+Q0014,STAT 8581_Syllabus_Pidgeon,What happens if a student is caught committing academic dishonesty twice in STAT 8581?,Disciplinary action will be taken with the Office of the Dean of Students.,"If a student is caught committing academic dishonesty twice in STAT 8581, they will receive an F and another referral."
+Q0015,STAT8670_syllabus_Sep2,What is the CRN for STAT 8670?,CRN 87545,The CRN for STAT 8670 is 87545.
+Q0016,None,When is the Halloween festival?,I don't know,I don't know based on the provided context.
+Q0017,None,Why is the sky blue?,I don't know,I don't know based on the provided context.
+Q0018,None,Who is the instructor in MILE?,I don't know,I don't know based on the provided context.
+Q0019,None,When does the Chick-fil-A offer its biggest discounts?,I don't know,I don't know based on the provided context.
+Q0020,None,When does the Blackpink hold concerts in Atlanta?,I don't know,I don't know based on the provided context.

@@ -27,6 +27,13 @@ api_ingest_handler <- function(body) {
   if (is.null(paths)) {
     stop("Request body must contain a 'paths' field.", call. = FALSE)
   }
+# ✅ Robust coercion: JSON array -> character vector
+  paths <- unlist(paths, use.names = FALSE)
+  paths <- as.character(paths)
+
+if (length(paths) == 0 || anyNA(paths)) {
+  stop("`paths` must be a non-empty character vector of file paths.", call. = FALSE)
+}
 
   collection      <- if (!is.null(body$collection))      body$collection      else "default"
   chunk_size      <- if (!is.null(body$chunk_size))      body$chunk_size      else 500L
@@ -79,6 +86,7 @@ api_chat_handler <- function(body) {
     stop("Request body must contain a character scalar 'question'.", call. = FALSE)
   }
 
+  eval_id         <- if (!is.null(body$eval_id))         body$eval_id         else NA_character_
   collection      <- if (!is.null(body$collection))      body$collection      else "default"
   top_k           <- if (!is.null(body$top_k))           body$top_k           else 4L
   embedding_model <- if (!is.null(body$embedding_model)) body$embedding_model else "text-embedding-3-small"
@@ -92,6 +100,27 @@ api_chat_handler <- function(body) {
     chat_model      = chat_model
   )
 
+
+  # ---- NEW: log this interaction into qa_log.rds ---------------------------
+  qa_log_path <- "db/qa_log.rds"
+
+  # load_qa_log() should create an empty log if file doesn't exist
+  qa_log <- load_qa_log(qa_log_path)
+
+  qa_log <- log_rag_interaction(
+    qa_log      = qa_log,
+    question    = question,
+    rag_result  = rag_res,
+    collection  = collection,
+    chat_model      = chat_model,
+    embedding_model = embedding_model,
+    eval_id         = eval_id
+  )
+
+  save_qa_log(qa_log, qa_log_path)
+  # --------------------------------------------------------------------------
+
+>>>>>>> theirs
   list(
     status    = "ok",
     answer    = rag_res$answer,
