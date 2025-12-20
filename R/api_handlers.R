@@ -120,7 +120,6 @@ api_chat_handler <- function(body) {
   save_qa_log(qa_log, qa_log_path)
   # --------------------------------------------------------------------------
 
->>>>>>> theirs
   list(
     status    = "ok",
     answer    = rag_res$answer,
