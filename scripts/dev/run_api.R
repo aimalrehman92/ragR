@@ -14,7 +14,7 @@ api <- plumber::pr()
 api$handle("POST", "/ingest", source("inst/api/pr_ingest.R")[[1]])
 api$handle("POST", "/chat",   source("inst/api/pr_chat.R")[[1]])
 api$handle("POST", "/clear",  source("inst/api/pr_clear.R")[[1]])
-=======
+
 
 # ---- CORS filter (works with older plumber versions) ------------------------
 api$filter("cors", function(req, res) {
@@ -101,7 +101,7 @@ api <- plumber::pr_static(
 )
 # -----------------------------------------------------------------------------
 
->>>>>>> Stashed changes
+
 
 # Run the API
 plumber::pr_run(api, host = "0.0.0.0", port = 8000)
