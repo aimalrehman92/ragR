@@ -1,27 +1,31 @@
-#' Summarize RAGAS-style metrics
+# R/ragas_summary.R
+
+#' Summarize RAGAS metrics across QA pairs
 #'
-#' Given a tibble of QA metrics (as returned by [compute_ragas_metrics()]),
-#' this function computes simple descriptive statistics (mean, standard
-#' deviation, minimum, maximum) for each metric column.
+#' Computes mean/sd/min/max for each metric column in a QA-metrics tibble.
 #'
-#' @param qa_metrics A tibble returned by [compute_ragas_metrics()], with
-#'   columns `context_precision`, `context_recall`, `answer_relevance`,
-#'   `faithfulness`, and `ragas_overall`.
+#' @param qa_metrics A tibble returned by `compute_ragas_metrics_*()` with
+#'   metric columns such as `context_precision`, `context_recall`,
+#'   `answer_relevance`, `faithfulness`, and `ragas_overall`.
 #'
-#' @return A tibble with one row per metric and columns:
-#'   `metric`, `mean`, `sd`, `min`, `max`.
+#' @return A tibble with columns: `metric`, `mean`, `sd`, `min`, `max`.
 #' @export
 summarize_ragas <- function(qa_metrics) {
+  # Always return the same column structure (even if empty)
+  empty_out <- tibble::tibble(
+    metric = character(),
+    mean   = numeric(),
+    sd     = numeric(),
+    min    = numeric(),
+    max    = numeric()
+  )
+
   if (is.null(qa_metrics) || nrow(qa_metrics) == 0L) {
-    return(
-      tibble::tibble(
-        metric = character(),
-        mean   = numeric(),
-        sd     = numeric(),
-        min    = numeric(),
-        max    = numeric()
-      )
-    )
+    return(empty_out)
+  }
+
+  if (!is.data.frame(qa_metrics)) {
+    stop("qa_metrics must be a data frame / tibble.", call. = FALSE)
   }
 
   metric_cols <- c(
@@ -31,116 +35,78 @@ summarize_ragas <- function(qa_metrics) {
     "faithfulness",
     "ragas_overall"
   )
+  metric_cols <- metric_cols[metric_cols %in% names(qa_metrics)]
 
-  missing <- setdiff(metric_cols, names(qa_metrics))
-  if (length(missing) > 0L) {
-    stop(
-      "qa_metrics is missing required metric columns: ",
-      paste(missing, collapse = ", "),
-      call. = FALSE
-    )
+  if (length(metric_cols) == 0L) {
+    stop("qa_metrics contains no known metric columns to summarize.", call. = FALSE)
   }
 
   rows <- lapply(metric_cols, function(m) {
-    v <- qa_metrics[[m]]
+    x <- suppressWarnings(as.numeric(qa_metrics[[m]]))
 
-    tibble::tibble(
-      metric = m,
-      mean   = mean(v, na.rm = TRUE),
-      sd     = stats::sd(v, na.rm = TRUE),
-      min    = min(v, na.rm = TRUE),
-      max    = max(v, na.rm = TRUE)
-    )
+    if (length(x) == 0L || all(is.na(x))) {
+      tibble::tibble(metric = m, mean = NA_real_, sd = NA_real_, min = NA_real_, max = NA_real_)
+    } else {
+      tibble::tibble(
+        metric = m,
+        mean   = mean(x, na.rm = TRUE),
+        sd     = stats::sd(x, na.rm = TRUE),
+        min    = min(x, na.rm = TRUE),
+        max    = max(x, na.rm = TRUE)
+      )
+    }
   })
 
   dplyr::bind_rows(rows)
 }
 
-#' Plot distribution of overall RAGAS scores
+#' Plot mean RAGAS metrics to a PNG
 #'
-#' This convenience function draws a simple histogram of the `ragas_overall`
-#' scores using base R graphics. It is intended for quick visual inspection
-#' of how the overall scores are distributed.
+#' Creates a simple, publication-friendly bar chart of mean metric values.
 #'
-#' @param qa_metrics A tibble returned by [compute_ragas_metrics()].
-#' @param breaks Number of breaks for the histogram; passed to [graphics::hist()].
-#' @param main Optional main title for the plot.
+#' @param summary_df Output of `summarize_ragas()`.
+#' @param output_path Where to save the PNG.
+#' @param width,height Plot size in pixels.
 #'
-#' @return Invisibly, the result of [graphics::hist()].
-#' @export
-plot_ragas_overall <- function(
-  qa_metrics,
-  breaks = 10,
-  main   = "Distribution of RAGAS overall scores"
-) {
-  if (is.null(qa_metrics) || nrow(qa_metrics) == 0L) {
-    warning("qa_metrics is empty; nothing to plot.", call. = FALSE)
-    return(invisible(NULL))
-  }
-
-  if (!"ragas_overall" %in% names(qa_metrics)) {
-    stop("qa_metrics must have a 'ragas_overall' column.", call. = FALSE)
-  }
-
-  scores <- qa_metrics$ragas_overall
-  scores <- scores[is.finite(scores)]
-
-  if (length(scores) == 0L) {
-    warning("No finite ragas_overall scores to plot.", call. = FALSE)
-    return(invisible(NULL))
-  }
-
-  graphics::hist(
-    scores,
-    breaks = breaks,
-    main   = main,
-    xlab   = "RAGAS overall score",
-    ylab   = "Frequency"
-  )
-}
-
-#' Plot mean RAGAS-style metrics as a bar chart
-#'
-#' This convenience function computes summary statistics via
-#' [summarize_ragas()] and then draws a bar chart of the mean value for
-#' each metric using base R graphics. It is useful for quickly comparing
-#' how different metrics behave on a given QA log.
-#'
-#' @param qa_metrics A tibble returned by [compute_ragas_metrics()].
-#' @param main Optional main title for the plot.
-#' @param ylim Optional y-axis limits. If `NULL`, defaults to c(0, 1).
-#'
-#' @return Invisibly, the result of [graphics::barplot()].
+#' @return Invisibly, `output_path`.
 #' @export
 plot_ragas_means <- function(
-  qa_metrics,
-  main = "Mean RAGAS-style metrics",
-  ylim = c(0, 1)
+  summary_df,
+  output_path,
+  width = 1200,
+  height = 700
 ) {
-  if (is.null(qa_metrics) || nrow(qa_metrics) == 0L) {
-    warning("qa_metrics is empty; nothing to plot.", call. = FALSE)
-    return(invisible(NULL))
+  if (is.null(summary_df) || nrow(summary_df) == 0L) {
+    stop("summary_df is empty; nothing to plot.", call. = FALSE)
+  }
+  if (!all(c("metric", "mean") %in% names(summary_df))) {
+    stop("summary_df must have columns: metric, mean.", call. = FALSE)
   }
 
-  summary_tbl <- summarize_ragas(qa_metrics)
+  dir.create(dirname(output_path), recursive = TRUE, showWarnings = FALSE)
 
-  if (nrow(summary_tbl) == 0L) {
-    warning("summarize_ragas() returned no metrics to plot.", call. = FALSE)
-    return(invisible(NULL))
-  }
+  # Base R plotting (no extra deps)
+  grDevices::png(filename = output_path, width = width, height = height, res = 150)
+  on.exit(grDevices::dev.off(), add = TRUE)
 
-  means  <- summary_tbl$mean
-  names(means) <- summary_tbl$metric
+  graphics::par(mar = c(9, 5, 3, 1) + 0.1)
 
-  if (is.null(ylim)) {
-    ylim <- range(c(0, means), na.rm = TRUE)
-  }
+  means <- as.numeric(summary_df$mean)
+  names(means) <- as.character(summary_df$metric)
 
-  graphics::barplot(
+  bp <- graphics::barplot(
     height = means,
-    main   = main,
-    ylab   = "Mean metric value",
-    ylim   = ylim
+    las = 2,
+    ylim = c(0, max(1, max(means, na.rm = TRUE)) * 1.1),
+    ylab = "Mean score",
+    main = "RAGAS Metric Means"
   )
-}
 
+  # x-axis labels (explicit, readable)
+  graphics::axis(1, at = bp, labels = names(means), las = 2)
+
+  # light grid for readability
+  graphics::grid(nx = NA, ny = NULL)
+
+  invisible(output_path)
+}

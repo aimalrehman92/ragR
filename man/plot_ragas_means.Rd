@@ -2,23 +2,20 @@
 % Please edit documentation in R/ragas_summary.R
 \name{plot_ragas_means}
 \alias{plot_ragas_means}
-\title{Plot mean RAGAS-style metrics as a bar chart}
+\title{Plot mean RAGAS metrics to a PNG}
 \usage{
-plot_ragas_means(qa_metrics, main = "Mean RAGAS-style metrics", ylim = c(0, 1))
+plot_ragas_means(summary_df, output_path, width = 1200, height = 700)
 }
 \arguments{
-\item{qa_metrics}{A tibble returned by \code{\link[=compute_ragas_metrics]{compute_ragas_metrics()}}.}
+\item{summary_df}{Output of \code{summarize_ragas()}.}
 
-\item{main}{Optional main title for the plot.}
+\item{output_path}{Where to save the PNG.}
 
-\item{ylim}{Optional y-axis limits. If \code{NULL}, defaults to c(0, 1).}
+\item{width, height}{Plot size in pixels.}
 }
 \value{
-Invisibly, the result of \code{\link[graphics:barplot]{graphics::barplot()}}.
+Invisibly, \code{output_path}.
 }
 \description{
-This convenience function computes summary statistics via
-\code{\link[=summarize_ragas]{summarize_ragas()}} and then draws a bar chart of the mean value for
-each metric using base R graphics. It is useful for quickly comparing
-how different metrics behave on a given QA log.
+Creates a simple, publication-friendly bar chart of mean metric values.
 }

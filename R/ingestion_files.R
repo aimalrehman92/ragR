@@ -86,7 +86,7 @@ ingest_documents <- function(
   )
 } else {
   if (verbose) message("Using dummy embeddings (no OpenAI call).")
-  embeddings <- dummy_embeddings(chunks_df$text, dim = 16L)
+  embeddings <- dummy_embeddings(chunks_df$text, dims = 16L)
 }
 
   # 3) Build metadata list for each chunk ----------------------------------

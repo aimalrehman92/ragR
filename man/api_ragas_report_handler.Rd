@@ -7,26 +7,25 @@
 api_ragas_report_handler(
   qa_log_path = "db/qa_log.rds",
   qa_metrics_path = "db/qa_metrics.rds",
-  output_dir = "reports/ragas"
+  output_dir = "reports/ragas",
+  mode = NULL
 )
 }
 \arguments{
 \item{qa_log_path}{Character scalar; path to the QA log RDS file.
 Defaults to \code{"db/qa_log.rds"}.}
 
-\item{qa_metrics_path}{Character scalar; path to the QA metrics RDS
-file. Defaults to \code{"db/qa_metrics.rds"}.}
+\item{qa_metrics_path}{Character scalar; path to the QA metrics RDS file.
+Defaults to \code{"db/qa_metrics.rds"}.}
 
-\item{output_dir}{Character scalar; directory where the summary CSV
-and PNG image will be written. Defaults to \code{"reports/ragas"}.}
+\item{output_dir}{Character scalar; directory where outputs are written.
+Defaults to \code{"reports/ragas"}.}
+
+\item{mode}{\code{"approx"} or \code{"llm"}. If NULL, uses option \code{ragR.ragas_mode}.}
 }
 \value{
-A list suitable for JSON serialization, with elements:
-\code{status}, \code{n_qa}, \code{qa_metrics_path}, \code{summary_csv_path}, \code{plot_path}.
+A list: \code{status}, \code{n_qa}, \code{qa_metrics_path}, \code{summary_csv_path}, \code{plot_path}.
 }
 \description{
-This handler is intended to be called from an HTTP endpoint. It
-generates RAGAS-style metrics based on the saved QA log, writes a
-summary table (CSV) and a bar chart image (PNG) to disk, and returns
-a small list with paths and status information.
+API handler: generate RAGAS performance report
 }

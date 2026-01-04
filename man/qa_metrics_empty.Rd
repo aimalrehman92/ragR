@@ -13,3 +13,6 @@ A tibble with zero rows and the standard QA metrics columns.
 This helper creates an empty tibble with the columns used to store
 RAGAS-style evaluation metrics for each QA interaction.
 }
+\details{
+All metric values are expected to be in \eqn{[0,1]}.
+}

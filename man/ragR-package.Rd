@@ -123,7 +123,7 @@ Muhammad Aimal Rehman
 }
 
 \author{
-\strong{Maintainer}: Muhammad Aimal Rehman \email{your.email@example.com}
+\strong{Maintainer}: Muhammad Aimal Rehman \email{rehman.aimal@gmail.com}
 
 }
 \keyword{NLP}

@@ -2,34 +2,22 @@
 % Please edit documentation in R/ragas_metrics.R
 \name{compute_ragas_metrics}
 \alias{compute_ragas_metrics}
-\title{Compute simple RAGAS-style metrics for a QA log}
+\title{Compute RAGAS metrics (mode switch)}
 \usage{
-compute_ragas_metrics(qa_log)
+compute_ragas_metrics(qa_log, mode = NULL, judge_model = "gpt-4o-mini")
 }
 \arguments{
-\item{qa_log}{A tibble created and populated by \code{\link[=log_rag_interaction]{log_rag_interaction()}}.}
+\item{qa_log}{QA log tibble.}
+
+\item{mode}{One of \code{"approx"} or \code{"llm"}. If NULL, uses option
+\code{ragR.ragas_mode} (defaults to \code{"approx"}).}
+
+\item{judge_model}{Judge model for \code{mode="llm"} (default: "gpt-4o-mini").}
 }
 \value{
-A tibble with one row per \code{qa_id} and columns for the metrics.
+A metrics tibble.
 }
 \description{
-This function takes a QA log (as produced by \code{\link[=log_rag_interaction]{log_rag_interaction()}})
-and computes simple, deterministic proxy metrics for each row. These
-metrics are lexical approximations designed for reproducible testing
-and exploratory analysis. Later, they can be replaced or extended
-with LLM-based scoring.
-}
-\details{
-The metrics are:
-\itemize{
-\item context_precision: fraction of answer tokens that also appear in any
-retrieved context.
-\item context_recall: fraction of retrieved context tokens that appear in
-the answer.
-\item answer_relevance: lexical similarity between question and answer,
-measured as Jaccard similarity of token sets.
-\item faithfulness: here, approximated as the same as context_precision
-(placeholder proxy).
-\item ragas_overall: simple average of the above four metrics.
-}
+Convenience wrapper to compute either approximate proxy metrics or
+LLM-scored metrics.
 }

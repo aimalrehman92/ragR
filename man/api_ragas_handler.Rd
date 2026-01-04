@@ -4,24 +4,17 @@
 \alias{api_ragas_handler}
 \title{API handler: compute RAGAS metrics and summary from saved QA log}
 \usage{
-api_ragas_handler(path = "db/qa_log.rds")
+api_ragas_handler(path = "db/qa_log.rds", mode = NULL)
 }
 \arguments{
 \item{path}{Character scalar; path to the QA log RDS file. Defaults to
 \code{"db/qa_log.rds"}.}
+
+\item{mode}{\code{"approx"} or \code{"llm"}. If NULL, uses option \code{ragR.ragas_mode}.}
 }
 \value{
-A list with elements:
-\itemize{
-\item \code{status}: "ok"
-\item \code{n_qa}: number of rows in the QA log
-\item \code{metrics}: a data frame of per-QA metrics
-\item \code{summary}: a data frame of summary statistics per metric
-}
+A list with \code{status}, \code{n_qa}, \code{metrics}, \code{summary}.
 }
 \description{
-This function is intended to be called from an HTTP endpoint. It loads
-the QA log from disk (via \code{\link[=load_qa_log]{load_qa_log()}}), computes RAGAS-style
-metrics (via \code{\link[=compute_ragas_metrics]{compute_ragas_metrics()}}) and a summary (via
-\code{\link[=summarize_ragas]{summarize_ragas()}}), and returns a list that can be serialized as JSON.
+API handler: compute RAGAS metrics and summary from saved QA log
 }

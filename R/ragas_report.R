@@ -1,77 +1,84 @@
-#' Generate a RAGAS-style performance report
+# R/ragas_report.R
+
+#' Generate a RAGAS performance report (mode-aware)
 #'
-#' This function loads the QA log from disk, computes RAGAS-style metrics,
-#' and writes a summary table and a bar chart image to the local file
-#' system. It is intended to support external front-ends that want to
-#' display a performance report without recomputing everything in R.
+#' Loads a QA log from disk, computes metrics (approx or llm), writes:
+#' - metrics RDS (qa_metrics_path)
+#' - summary CSV (ragas_summary.csv)
+#' - means bar plot PNG (ragas_means.png)
 #'
-#' @param qa_log_path Character scalar; path to the QA log RDS file.
-#'   Defaults to `"db/qa_log.rds"`.
-#' @param qa_metrics_path Character scalar; path to the QA metrics RDS
-#'   file that will be written. Defaults to `"db/qa_metrics.rds"`.
-#' @param output_dir Character scalar; directory where the summary table
-#'   (CSV) and bar chart image (PNG) will be written. Defaults to
-#'   `"reports/ragas"`.
+#' @param qa_log_path Path to QA log RDS (default: "db/qa_log.rds").
+#' @param qa_metrics_path Path to metrics RDS output (default: "db/qa_metrics.rds").
+#' @param output_dir Output directory for CSV/PNG (default: "reports/ragas").
+#' @param mode `"approx"` or `"llm"`. If NULL, uses option `ragR.ragas_mode`.
+#' @param judge_model Judge model used when `mode="llm"` (default: "gpt-4o-mini").
 #'
-#' @return A list with elements:
-#'   - `status`: `"ok"` or `"empty"`
-#'   - `n_qa`: number of QA interactions in the log
-#'   - `qa_metrics_path`: path to the saved metrics RDS file (if any)
-#'   - `summary_csv_path`: path to the summary CSV file (if any)
-#'   - `plot_path`: path to the bar chart PNG file (if any)
+#' @return A list with: status, n_qa, qa_metrics_path, summary_csv_path, plot_path.
 #' @export
 generate_ragas_report <- function(
   qa_log_path     = "db/qa_log.rds",
   qa_metrics_path = "db/qa_metrics.rds",
-  output_dir      = "reports/ragas"
+  output_dir      = "reports/ragas",
+  mode            = NULL,
+  judge_model     = "gpt-4o-mini"
 ) {
-  # 1. Load QA log
   qa_log <- load_qa_log(qa_log_path)
-  n_qa   <- nrow(qa_log)
 
-  if (n_qa == 0L) {
-    return(list(
-      status           = "empty",
-      n_qa             = 0L,
-      qa_metrics_path  = NA_character_,
-      summary_csv_path = NA_character_,
-      plot_path        = NA_character_
-    ))
-  }
+  metrics <- compute_ragas_metrics(qa_log, mode = mode, judge_model = judge_model)
+  summary <- summarize_ragas(metrics)
 
-  # 2. Compute metrics and summary
-  qa_metrics <- compute_ragas_metrics(qa_log)
-  summary_tbl <- summarize_ragas(qa_metrics)
+  # save metrics
+  dir.create(dirname(qa_metrics_path), showWarnings = FALSE, recursive = TRUE)
+  saveRDS(metrics, qa_metrics_path)
 
-  # 3. Ensure output directories exist
-  metrics_dir <- dirname(qa_metrics_path)
-  if (!dir.exists(metrics_dir)) {
-    dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
-  }
-
-  if (!dir.exists(output_dir)) {
-    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  }
-
-  # 4. Save metrics as RDS
-  save_qa_metrics(qa_metrics, qa_metrics_path)
-
-  # 5. Save summary as CSV
+  # write summary CSV
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   summary_csv_path <- file.path(output_dir, "ragas_summary.csv")
-  utils::write.csv(summary_tbl, file = summary_csv_path, row.names = FALSE)
+  utils::write.csv(summary, summary_csv_path, row.names = FALSE)
 
-  # 6. Save bar chart of mean metrics as PNG
+  # plot means
   plot_path <- file.path(output_dir, "ragas_means.png")
-  grDevices::png(filename = plot_path, width = 800, height = 600)
-  on.exit(grDevices::dev.off(), add = TRUE)
-
-  plot_ragas_means(qa_metrics)
+  plot_ragas_means(summary, plot_path)
 
   list(
     status           = "ok",
-    n_qa             = n_qa,
+    n_qa             = nrow(qa_log),
     qa_metrics_path  = qa_metrics_path,
     summary_csv_path = summary_csv_path,
     plot_path        = plot_path
+  )
+}
+
+#' Generate RAGAS report using approximations
+#' @inheritParams generate_ragas_report
+#' @export
+generate_ragas_report_approx <- function(
+  qa_log_path     = "db/qa_log.rds",
+  qa_metrics_path = "db/qa_metrics.rds",
+  output_dir      = "reports/ragas"
+) {
+  generate_ragas_report(
+    qa_log_path     = qa_log_path,
+    qa_metrics_path = qa_metrics_path,
+    output_dir      = output_dir,
+    mode            = "approx"
+  )
+}
+
+#' Generate RAGAS report using LLM scoring
+#' @inheritParams generate_ragas_report
+#' @export
+generate_ragas_report_llm <- function(
+  qa_log_path     = "db/qa_log.rds",
+  qa_metrics_path = "db/qa_metrics.rds",
+  output_dir      = "reports/ragas",
+  judge_model     = "gpt-4o-mini"
+) {
+  generate_ragas_report(
+    qa_log_path     = qa_log_path,
+    qa_metrics_path = qa_metrics_path,
+    output_dir      = output_dir,
+    mode            = "llm",
+    judge_model     = judge_model
   )
 }

@@ -2,21 +2,18 @@
 % Please edit documentation in R/ragas_summary.R
 \name{summarize_ragas}
 \alias{summarize_ragas}
-\title{Summarize RAGAS-style metrics}
+\title{Summarize RAGAS metrics across QA pairs}
 \usage{
 summarize_ragas(qa_metrics)
 }
 \arguments{
-\item{qa_metrics}{A tibble returned by \code{\link[=compute_ragas_metrics]{compute_ragas_metrics()}}, with
-columns \code{context_precision}, \code{context_recall}, \code{answer_relevance},
-\code{faithfulness}, and \code{ragas_overall}.}
+\item{qa_metrics}{A tibble returned by \verb{compute_ragas_metrics_*()} with
+metric columns such as \code{context_precision}, \code{context_recall},
+\code{answer_relevance}, \code{faithfulness}, and \code{ragas_overall}.}
 }
 \value{
-A tibble with one row per metric and columns:
-\code{metric}, \code{mean}, \code{sd}, \code{min}, \code{max}.
+A tibble with columns: \code{metric}, \code{mean}, \code{sd}, \code{min}, \code{max}.
 }
 \description{
-Given a tibble of QA metrics (as returned by \code{\link[=compute_ragas_metrics]{compute_ragas_metrics()}}),
-this function computes simple descriptive statistics (mean, standard
-deviation, minimum, maximum) for each metric column.
+Computes mean/sd/min/max for each metric column in a QA-metrics tibble.
 }
