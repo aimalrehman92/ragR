@@ -9,6 +9,7 @@ ingest_documents(
   collection = "default",
   chunk_size = 500L,
   chunk_overlap = 50L,
+  chunking_strategy = c("character", "sentence"),
   embedding_model = "text-embedding-3-small",
   use_openai = TRUE,
   verbose = TRUE
@@ -19,9 +20,13 @@ ingest_documents(
 
 \item{collection}{Character scalar; name of the collection.}
 
-\item{chunk_size}{Integer; target chunk size (in characters or tokens).}
+\item{chunk_size}{Integer; target chunk size (in characters).}
 
-\item{chunk_overlap}{Integer; overlap between consecutive chunks.}
+\item{chunk_overlap}{Integer; overlap between consecutive chunks.
+For \code{"character"} chunking: number of overlapping characters.
+For \code{"sentence"} chunking: number of overlapping sentences.}
+
+\item{chunking_strategy}{Character; \code{"character"} or \code{"sentence"}.}
 
 \item{embedding_model}{Character; OpenAI embedding model name.}
 
@@ -31,9 +36,18 @@ use a local dummy embedding generator (for offline development / tests).}
 \item{verbose}{Logical; if TRUE, log progress messages.}
 }
 \value{
-Invisibly, a tibble with chunk IDs and paths (or similar).
+A tibble with a per-file ingestion summary (\code{collection}, \code{path}, \code{n_chunks}).
 }
 \description{
 Reads PDF, DOCX, or TXT files, extracts text, chunks it, embeds chunks,
 and stores them in a vector store collection.
+}
+\details{
+Chunking strategies:
+\itemize{
+\item \code{"character"}: overlapping fixed-size character windows (current behavior).
+\item \code{"sentence"}: sentence-by-sentence packing into chunks up to \code{chunk_size}
+characters; overlap is applied in \emph{sentences} (the last \code{chunk_overlap}
+sentences of the previous chunk are prepended to the next chunk).
+}
 }
