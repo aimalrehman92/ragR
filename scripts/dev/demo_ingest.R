@@ -34,7 +34,7 @@ print(existing_paths)
 
 # 2. Choose chunking strategy ----------------------------------------------------
 # Options: "character" or "sentence"
-chunking_strategy <- "character"
+chunking_strategy <- "sentence"
 
 # 3. Run ingestion --------------------------------------------------------------
 

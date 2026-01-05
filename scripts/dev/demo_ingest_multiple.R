@@ -33,7 +33,7 @@ cat("Found", length(existing_paths), "file(s) to ingest.\n\n")
 
 # 2. Choose chunking strategy ----------------------------------------------------
 # Options: "character" or "sentence"
-chunking_strategy <- "character"
+chunking_strategy <- "sentence"
 
 # 3. Collection to use ----------------------------------------------------------
 
