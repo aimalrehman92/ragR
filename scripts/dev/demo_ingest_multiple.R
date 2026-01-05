@@ -1,89 +1,71 @@
 # scripts/dev/demo_ingest_multiple.R
 #
 # Purpose:
-#   Ingest EACH file one-by-one into the vector store using ragR.
+#   Ingest multiple files into the vector store one-by-one (no HTTP API).
 #
 # Usage (from project root):
 #   Rscript scripts/dev/demo_ingest_multiple.R
 #
 # Notes:
-#   - Add or modify files inside file_paths below.
-#   - Each file is ingested individually (separate ingest_documents() calls).
-#   - Choose chunking strategy via `chunking_strategy`.
+#   - Set `chunking_strategy` to "character" or "sentence".
+#   - Ingests each file separately so logs/prints are clearer.
 
 library(ragR)
 
-# 1. Define list of files to ingest ---------------------------------------------
+# ---------------- User settings ----------------
 
-file_paths <- c(
-  "data-raw/STAT_8581_Syllabus.txt",
+collection_name   <- "default"
+
+# Choose one: "character" or "sentence"
+chunking_strategy <- "sentence"
+
+# Only used for character chunking:
+chunk_size        <- 500L
+chunk_overlap     <- 50L
+
+embedding_model   <- "text-embedding-3-small"
+
+example_paths <- c(
+  "data-raw/happy_essay.txt",
   "data-raw/STAT_8670_Syllabus.txt"
 )
 
-existing_paths <- file_paths[file.exists(file_paths)]
+# -----------------------------------------------
+
+existing_paths <- example_paths[file.exists(example_paths)]
 
 if (length(existing_paths) == 0L) {
   stop(
-    "No files found. Please check paths under data-raw/",
+    "No example files found. Please check that the paths exist under data-raw/ ",
     call. = FALSE
   )
 }
 
-cat("Found", length(existing_paths), "file(s) to ingest.\n\n")
+cat("Ingesting files one-by-one:\n")
+print(existing_paths)
+cat("\nCollection:", collection_name, "\n")
+cat("Chunking strategy:", chunking_strategy, "\n\n")
 
-# 2. Choose chunking strategy ----------------------------------------------------
-# Options: "character" or "sentence"
-chunking_strategy <- "sentence"
+all_results <- list()
 
-# 3. Collection to use ----------------------------------------------------------
-
-collection_name <- "default"
-
-# Detect which chunking arg name exists in ingest_documents()
-fmls <- names(formals(ragR::ingest_documents))
-
-get_chunking_arg_name <- function() {
-  if ("chunking_strategy" %in% fmls) return("chunking_strategy")
-  if ("chunking" %in% fmls) return("chunking")
-  if ("chunking_method" %in% fmls) return("chunking_method")
-  return(NA_character_)
-}
-
-chunk_arg_name <- get_chunking_arg_name()
-
-if (is.na(chunk_arg_name)) {
-  message(
-    "NOTE: ingest_documents() does not appear to expose a chunking strategy argument.\n",
-    "      Proceeding without passing chunking_strategy."
-  )
-}
-
-# 4. Ingest each file separately ------------------------------------------------
-
-for (path in existing_paths) {
+for (p in existing_paths) {
   cat("------------------------------------------------------------\n")
-  cat("Ingesting file:", path, "\n")
+  cat("Ingesting file:", p, "\n")
 
-  ingest_args <- list(
-    paths           = path,  # ONE file per iteration
-    collection      = collection_name,
-    chunk_size      = 500,
-    chunk_overlap   = 50,
-    embedding_model = "text-embedding-3-small",
-    verbose         = TRUE
+  res <- ingest_documents(
+    paths             = p,
+    collection        = collection_name,
+    chunk_size        = chunk_size,
+    chunk_overlap     = chunk_overlap,
+    chunking_strategy = chunking_strategy,
+    embedding_model   = embedding_model,
+    verbose           = TRUE
   )
 
-  if (!is.na(chunk_arg_name)) {
-    ingest_args[[chunk_arg_name]] <- chunking_strategy
-  }
-
-  result <- do.call(ragR::ingest_documents, ingest_args)
-
-  cat("\nIngestion finished for:", path, "\n")
-  print(result)
-  cat("------------------------------------------------------------\n\n")
+  print(res)
+  all_results[[p]] <- res
 }
 
-cat("ALL FILES INGESTED.\n")
+cat("\n✅ Finished ingesting", length(existing_paths), "file(s).\n")
 cat("Collection used:", collection_name, "\n")
 cat("Chunking strategy used:", chunking_strategy, "\n")
