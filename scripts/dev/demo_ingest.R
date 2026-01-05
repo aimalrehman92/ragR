@@ -27,7 +27,7 @@ embedding_model   <- "text-embedding-3-small"
 
 example_paths <- c(
   # "data-raw/STAT_8670_Syllabus.txt"
-  "data-raw/happy_essay.txt"
+  "data-raw/happy_essay.pdf"
 )
 
 # -----------------------------------------------

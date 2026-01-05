@@ -6,17 +6,13 @@
 #' and stores them in a vector store collection.
 #'
 #' Chunking strategies:
-#' - `"character"`: overlapping fixed-size character windows (current behavior).
-#' - `"sentence"`: sentence-by-sentence packing into chunks up to `chunk_size`
-#'   characters; overlap is applied in *sentences* (the last `chunk_overlap`
-#'   sentences of the previous chunk are prepended to the next chunk).
+#' - `"character"`: overlapping fixed-size character windows.
+#' - `"sentence"`: strict sentence splitting via `chunk_text_sentence()`.
 #'
 #' @param paths Character vector of file paths to ingest.
 #' @param collection Character scalar; name of the collection.
-#' @param chunk_size Integer; target chunk size (in characters).
-#' @param chunk_overlap Integer; overlap between consecutive chunks.
-#'   For `"character"` chunking: number of overlapping characters.
-#'   For `"sentence"` chunking: number of overlapping sentences.
+#' @param chunk_size Integer; target chunk size (in characters). Used for `"character"`.
+#' @param chunk_overlap Integer; overlap between consecutive chunks. Used for `"character"`.
 #' @param chunking_strategy Character; `"character"` or `"sentence"`.
 #' @param embedding_model Character; OpenAI embedding model name.
 #' @param use_openai Logical; if TRUE, use OpenAI embeddings. If FALSE,
@@ -37,11 +33,8 @@ ingest_documents <- function(
 ) {
   chunking_strategy <- match.arg(chunking_strategy)
 
-  if (!is.character(paths)) {
-    stop("paths must be a character vector.", call. = FALSE)
-  }
-  if (length(paths) == 0L) {
-    stop("paths must have length >= 1.", call. = FALSE)
+  if (!is.character(paths) || length(paths) == 0L) {
+    stop("paths must be a non-empty character vector.", call. = FALSE)
   }
   if (!is.numeric(chunk_size) || length(chunk_size) != 1L || chunk_size <= 0) {
     stop("chunk_size must be a positive number.", call. = FALSE)
@@ -50,7 +43,8 @@ ingest_documents <- function(
     stop("chunk_overlap must be a non-negative number.", call. = FALSE)
   }
 
-  # 1) Extract and chunk all documents -------------------------------------
+  chunk_size    <- as.integer(chunk_size)
+  chunk_overlap <- as.integer(chunk_overlap)
 
   all_chunks <- list()
   idx <- 1L
@@ -64,26 +58,30 @@ ingest_documents <- function(
       chunking_strategy,
       character = chunk_text_character(
         text          = txt,
-        chunk_size    = as.integer(chunk_size),
-        chunk_overlap = as.integer(chunk_overlap)
+        chunk_size    = chunk_size,
+        chunk_overlap = chunk_overlap
       ),
-      sentence = chunk_text_sentence(
-        text          = txt,
-        chunk_size    = as.integer(chunk_size),
-        chunk_overlap = as.integer(chunk_overlap)
-      )
+      sentence = chunk_text_sentence(text = txt)
     )
 
-    n_chunks <- length(chunks)
-    if (n_chunks == 0L) next
+    # ---- FIX: normalize chunks FIRST, THEN compute n_chunks ----
+    chunks <- unlist(chunks, use.names = FALSE)
+    chunks <- as.character(chunks)
+    chunks <- trimws(chunks)
+    chunks <- chunks[nzchar(chunks)]
 
-    # Create IDs like "<basename>_0001", "<basename>_0002", ...
+    n_chunks <- length(chunks)
+    if (n_chunks == 0L) {
+      if (verbose) message("No chunks produced for file: ", p)
+      next
+    }
+
     base <- tools::file_path_sans_ext(basename(p))
     ids  <- sprintf("%s_%04d", base, seq_len(n_chunks))
 
     all_chunks[[idx]] <- tibble::tibble(
-      path        = p,
-      collection  = collection,
+      path        = rep(p, n_chunks),
+      collection  = rep(collection, n_chunks),
       id          = ids,
       chunk_index = seq_len(n_chunks),
       text        = chunks
@@ -99,8 +97,7 @@ ingest_documents <- function(
 
   if (verbose) message("Total chunks: ", nrow(chunks_df))
 
-  # 2) Compute embeddings for all chunks -----------------------------------
-
+  # Embeddings
   if (use_openai) {
     embeddings <- get_openai_embeddings(
       texts = chunks_df$text,
@@ -111,18 +108,15 @@ ingest_documents <- function(
     embeddings <- dummy_embeddings(chunks_df$text, dims = 16L)
   }
 
-  # 3) Build metadata list for each chunk ----------------------------------
-
+  # Metadata
   metadatas <- lapply(seq_len(nrow(chunks_df)), function(i) {
     list(
-      path        = chunks_df$path[i],
-      collection  = chunks_df$collection[i],
-      chunk_index = chunks_df$chunk_index[i],
+      path              = chunks_df$path[i],
+      collection        = chunks_df$collection[i],
+      chunk_index       = chunks_df$chunk_index[i],
       chunking_strategy = chunking_strategy
     )
   })
-
-  # 4) Upsert into the vector store ----------------------------------------
 
   vectorstore_upsert(
     collection = collection,
@@ -132,14 +126,13 @@ ingest_documents <- function(
     metadatas  = metadatas
   )
 
-  # 5) Return a per-file summary -------------------------------------------
-
   summary_df <- chunks_df |>
     dplyr::count(path, name = "n_chunks") |>
     dplyr::mutate(collection = collection, .before = 1)
 
   summary_df
 }
+
 
 #' Extract text from a document
 #'
@@ -217,82 +210,36 @@ chunk_text_character <- function(text, chunk_size = 500L, chunk_overlap = 50L) {
 
 # --- Chunking: sentence packing -----------------------------------------------
 
-#' Chunk text by packing sentences into chunks
+#' Chunk text into sentences (strict)
 #'
-#' Sentences are split using a simple punctuation heuristic. Sentences are
-#' then packed into chunks up to `chunk_size` characters (approx).
-#'
-#' Overlap behavior: the last `chunk_overlap` sentences from the previous
-#' chunk are prepended to the next chunk.
+#' Splits text into individual sentences. Each returned element is intended
+#' to be exactly one sentence (best-effort based on punctuation).
 #'
 #' @param text Character scalar.
-#' @param chunk_size Integer, target max chunk length (characters).
-#' @param chunk_overlap Integer, overlap between chunks (sentences).
 #'
-#' @return Character vector of chunks.
-#' @keywords internal
-chunk_text_sentence <- function(text, chunk_size = 500L, chunk_overlap = 2L) {
+#' @return Character vector; one sentence per element.
+#' @export
+chunk_text_sentence <- function(text) {
   if (!is.character(text) || length(text) != 1L) {
     stop("text must be a single character string.", call. = FALSE)
   }
 
-  txt <- trimws(text)
-  if (!nzchar(txt)) return(character(0L))
+  x <- text
 
-  # Split into sentences (heuristic)
-  sentences <- unlist(
-    strsplit(txt, "(?<=[.!?])\\s+", perl = TRUE),
-    use.names = FALSE
-  )
-  sentences <- trimws(sentences)
-  sentences <- sentences[nzchar(sentences)]
+  # Normalize whitespace/newlines a bit (PDFs often have odd line breaks)
+  x <- gsub("[\r\n]+", " ", x)
+  x <- gsub("\\s+", " ", x)
+  x <- trimws(x)
 
-  if (length(sentences) == 0L) return(character(0L))
-
-  # Pack sentences into chunks
-  chunks <- character(0L)
-  cur <- character(0L)
-  cur_n <- 0L
-
-  flush_chunk <- function(cur_sentences) {
-    paste(cur_sentences, collapse = " ")
+  if (!nzchar(x)) {
+    return(character(0L))
   }
 
-  for (s in sentences) {
-    s_len <- nchar(s)
-    add_len <- if (length(cur) == 0L) s_len else (1L + s_len) # + space
+  # Split after sentence-ending punctuation followed by whitespace
+  # (best-effort, deterministic)
+  parts <- unlist(strsplit(x, "(?<=[.!?])\\s+", perl = TRUE), use.names = FALSE)
+  parts <- trimws(parts)
+  parts <- parts[nzchar(parts)]
 
-    if (length(cur) > 0L && (cur_n + add_len) > chunk_size) {
-      # emit current chunk
-      chunks <- c(chunks, flush_chunk(cur))
-
-      # start next chunk with overlap in sentences
-      ov <- as.integer(chunk_overlap)
-      if (is.na(ov) || ov < 0L) ov <- 0L
-      if (ov > 0L) {
-        keep <- utils::tail(cur, min(ov, length(cur)))
-        cur <- keep
-        cur_n <- nchar(flush_chunk(cur))
-      } else {
-        cur <- character(0L)
-        cur_n <- 0L
-      }
-    }
-
-    # If a single sentence is longer than chunk_size, we still keep it as its own chunk
-    if (length(cur) == 0L && s_len > chunk_size) {
-      chunks <- c(chunks, s)
-      next
-    }
-
-    # append sentence
-    cur <- c(cur, s)
-    cur_n <- nchar(flush_chunk(cur))
-  }
-
-  if (length(cur) > 0L) {
-    chunks <- c(chunks, flush_chunk(cur))
-  }
-
-  chunks
+  parts
 }

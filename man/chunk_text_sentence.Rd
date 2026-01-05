@@ -2,26 +2,17 @@
 % Please edit documentation in R/ingestion_files.R
 \name{chunk_text_sentence}
 \alias{chunk_text_sentence}
-\title{Chunk text by packing sentences into chunks}
+\title{Chunk text into sentences (strict)}
 \usage{
-chunk_text_sentence(text, chunk_size = 500L, chunk_overlap = 2L)
+chunk_text_sentence(text)
 }
 \arguments{
 \item{text}{Character scalar.}
-
-\item{chunk_size}{Integer, target max chunk length (characters).}
-
-\item{chunk_overlap}{Integer, overlap between chunks (sentences).}
 }
 \value{
-Character vector of chunks.
+Character vector; one sentence per element.
 }
 \description{
-Sentences are split using a simple punctuation heuristic. Sentences are
-then packed into chunks up to \code{chunk_size} characters (approx).
+Splits text into individual sentences. Each returned element is intended
+to be exactly one sentence (best-effort based on punctuation).
 }
-\details{
-Overlap behavior: the last \code{chunk_overlap} sentences from the previous
-chunk are prepended to the next chunk.
-}
-\keyword{internal}

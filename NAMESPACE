@@ -3,6 +3,7 @@
 export(api_clear_all_handler)
 export(api_ragas_handler)
 export(api_ragas_report_handler)
+export(chunk_text_sentence)
 export(clear_qa_log)
 export(clear_qa_metrics)
 export(compute_ragas_metrics)

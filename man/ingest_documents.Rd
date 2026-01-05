@@ -20,11 +20,9 @@ ingest_documents(
 
 \item{collection}{Character scalar; name of the collection.}
 
-\item{chunk_size}{Integer; target chunk size (in characters).}
+\item{chunk_size}{Integer; target chunk size (in characters). Used for \code{"character"}.}
 
-\item{chunk_overlap}{Integer; overlap between consecutive chunks.
-For \code{"character"} chunking: number of overlapping characters.
-For \code{"sentence"} chunking: number of overlapping sentences.}
+\item{chunk_overlap}{Integer; overlap between consecutive chunks. Used for \code{"character"}.}
 
 \item{chunking_strategy}{Character; \code{"character"} or \code{"sentence"}.}
 
@@ -45,9 +43,7 @@ and stores them in a vector store collection.
 \details{
 Chunking strategies:
 \itemize{
-\item \code{"character"}: overlapping fixed-size character windows (current behavior).
-\item \code{"sentence"}: sentence-by-sentence packing into chunks up to \code{chunk_size}
-characters; overlap is applied in \emph{sentences} (the last \code{chunk_overlap}
-sentences of the previous chunk are prepended to the next chunk).
+\item \code{"character"}: overlapping fixed-size character windows.
+\item \code{"sentence"}: strict sentence splitting via \code{chunk_text_sentence()}.
 }
 }
