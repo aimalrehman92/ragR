@@ -1,3 +1,4 @@
+# R/embeddings_openai.R
 
 #' Get embeddings from OpenAI
 #'
@@ -21,7 +22,6 @@ get_openai_embeddings <- function(
   if (!is.character(texts)) {
     stop("texts must be a character vector.", call. = FALSE)
   }
-
   if (length(texts) == 0L) {
     stop("texts must have length >= 1.", call. = FALSE)
   }
@@ -30,7 +30,6 @@ get_openai_embeddings <- function(
     api_key <- get_env_or_stop("OPENAI_API_KEY")
   }
 
-  # Prepare request body for OpenAI embeddings API
   body <- list(
     model = model,
     input = as.list(texts)
@@ -48,7 +47,8 @@ get_openai_embeddings <- function(
   if (httr2::resp_status(resp) >= 300) {
     stop(
       "OpenAI embeddings request failed with status ",
-      httr2::resp_status(resp), call. = FALSE
+      httr2::resp_status(resp),
+      call. = FALSE
     )
   }
 
@@ -58,25 +58,19 @@ get_openai_embeddings <- function(
     stop("Unexpected response format from OpenAI embeddings API.", call. = FALSE)
   }
 
-  # Extract embeddings: each entry in parsed$data has $embedding
   emb_list <- lapply(parsed$data, function(d) {
     unlist(d$embedding, use.names = FALSE)
   })
 
-  # Convert list of numeric vectors -> matrix (rows = texts, cols = dims)
   emb_mat <- do.call(rbind, emb_list)
-
-  # Ensure it's numeric
   storage.mode(emb_mat) <- "double"
 
-  # If only one embedding, `emb_mat` might have lost its dim; fix to 1-row matrix
   if (is.null(dim(emb_mat))) {
     emb_mat <- matrix(emb_mat, nrow = 1)
   }
 
   emb_mat
 }
-
 
 #' Generate a chat completion from OpenAI
 #'
@@ -90,6 +84,8 @@ get_openai_embeddings <- function(
 #' @param system_message Optional system message. If NULL, a default
 #'   system message will be used.
 #' @param temperature Numeric; sampling temperature (0 = deterministic).
+#' @param max_output_tokens Integer; maximum tokens to generate in the
+#'   completion. Passed to the Chat Completions API as `max_tokens`.
 #' @param api_key OpenAI API key. If NULL, the function will default
 #'   to the \code{OPENAI_API_KEY} environment variable.
 #'
@@ -97,13 +93,33 @@ get_openai_embeddings <- function(
 #' @export
 generate_openai_chat <- function(
   prompt,
-  model          = "gpt-4o-mini",
-  system_message = NULL,
-  temperature    = 0,
-  api_key        = NULL
+  model             = "gpt-4o-mini",
+  system_message    = NULL,
+  temperature       = 0,
+  max_output_tokens = 512L,
+  api_key           = NULL
 ) {
   if (!is.character(prompt) || length(prompt) != 1L) {
     stop("prompt must be a single character string.", call. = FALSE)
+  }
+
+  if (!is.numeric(temperature) || length(temperature) != 1L) {
+    stop("temperature must be a single numeric value.", call. = FALSE)
+  }
+  if (is.na(temperature) || temperature < 0) {
+    stop("temperature must be >= 0.", call. = FALSE)
+  }
+  # Optional strictness:
+  if (!is.na(temperature) && temperature > 2) {
+    stop("temperature must be <= 2.", call. = FALSE)
+  }
+
+  if (!is.numeric(max_output_tokens) || length(max_output_tokens) != 1L) {
+    stop("max_output_tokens must be a single numeric value.", call. = FALSE)
+  }
+  max_output_tokens <- as.integer(max_output_tokens)
+  if (is.na(max_output_tokens) || max_output_tokens <= 0L) {
+    stop("max_output_tokens must be a positive integer.", call. = FALSE)
   }
 
   if (is.null(api_key)) {
@@ -117,21 +133,16 @@ generate_openai_chat <- function(
   body <- list(
     model = model,
     messages = list(
-      list(
-        role    = "system",
-        content = system_message
-      ),
-      list(
-        role    = "user",
-        content = prompt
-      )
+      list(role = "system", content = system_message),
+      list(role = "user",   content = prompt)
     ),
-    temperature = temperature
+    temperature = temperature,
+    max_tokens  = max_output_tokens
   )
 
   req <- httr2::request("https://api.openai.com/v1/chat/completions") |>
     httr2::req_headers(
-      Authorization = paste("Bearer", api_key),
+      Authorization  = paste("Bearer", api_key),
       `Content-Type` = "application/json"
     ) |>
     httr2::req_body_json(body)
@@ -155,7 +166,6 @@ generate_openai_chat <- function(
     )
   }
 
-  # Parse WITHOUT simplifying to vectors, to keep list structure predictable
   parsed <- httr2::resp_body_json(resp, simplifyVector = FALSE)
 
   choices <- parsed$choices
@@ -164,12 +174,8 @@ generate_openai_chat <- function(
   }
 
   first_choice <- choices[[1]]
+  message_obj  <- first_choice$message
 
-  # For the standard Chat Completions API:
-  message_obj <- first_choice$message
-
-  # message_obj can be a list with a 'content' field, or in some edge cases
-  # a simple character. Handle both.
   if (is.list(message_obj) && !is.null(message_obj$content)) {
     answer <- message_obj$content
   } else if (is.character(message_obj)) {
@@ -180,5 +186,3 @@ generate_openai_chat <- function(
 
   as.character(answer)
 }
-
-

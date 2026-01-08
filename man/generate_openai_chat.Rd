@@ -9,6 +9,7 @@ generate_openai_chat(
   model = "gpt-4o-mini",
   system_message = NULL,
   temperature = 0,
+  max_output_tokens = 512L,
   api_key = NULL
 )
 }
@@ -23,6 +24,9 @@ the question and relevant context.}
 system message will be used.}
 
 \item{temperature}{Numeric; sampling temperature (0 = deterministic).}
+
+\item{max_output_tokens}{Integer; maximum tokens to generate in the
+completion. Passed to the Chat Completions API as \code{max_tokens}.}
 
 \item{api_key}{OpenAI API key. If NULL, the function will default
 to the \code{OPENAI_API_KEY} environment variable.}

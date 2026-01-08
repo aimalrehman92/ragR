@@ -12,43 +12,62 @@
 
 library(ragR)
 
-# 1. Define the question and collection -----------------------------------------
+# ---------------- User settings (edit these) ----------------------------------
 
-collection_name <- "default"
+collection <- "default"
 
-question <- "What is the withdrawal deadline for STAT 8581?"
-
-cat("Asking question via RAG:\n")
-cat("  ", question, "\n\n")
-
-# 2. Measure RAG time -----------------------------------------------------------
-
-t_start <- proc.time()   # start timer
-
-rag_result <- query_rag(
-  question        = question,
-  collection      = collection_name,
-  top_k           = 5,
-  embedding_model = "text-embedding-3-small",
-  chat_model      = "gpt-4o-mini"
+questions <- c(
+  "What is the attendance policy for STAT 8670?"
 )
 
-t_end <- proc.time()     # end timer
-t_elapsed <- t_end - t_start
-rag_time_sec <- as.numeric(t_elapsed["elapsed"])
+top_k <- 5L
 
-# 3. Display the answer ---------------------------------------------------------
+embedding_model <- "text-embedding-3-small"
+chat_model      <- "gpt-4o-mini"
 
-cat("Answer:\n")
-cat(rag_result$answer, "\n\n")
+temperature       <- 0
+max_output_tokens <- 300L
 
-# 4. Display retrieved context --------------------------------------------------
+score_threshold <- 0
 
-cat("Retrieved context (first few rows):\n")
-print(utils::head(rag_result$retrieved))
+# Example system prompt (used inside build_rag_prompt)
+system_prompt <- "You are a helpful academic course assistant.\n\n"
 
-# 5. Display RAG timing ---------------------------------------------------------
+# ------------------------------------------------------------------------------
 
-cat("\n---------------------------------------------\n")
-cat("RAG pipeline completed in:", round(rag_time_sec, 3), "seconds\n")
-cat("---------------------------------------------\n")
+cat("Asking questions via RAG:\n")
+for (q in questions) cat("  ", q, "\n")
+cat("\n")
+
+cat("Settings:\n")
+cat("  Collection       :", collection, "\n")
+cat("  top_k            :", top_k, "\n")
+cat("  embedding_model  :", embedding_model, "\n")
+cat("  chat_model       :", chat_model, "\n")
+cat("  temperature      :", temperature, "\n")
+cat("  max_output_tokens:", max_output_tokens, "\n")
+cat("  score_threshold  :", score_threshold, "\n\n")
+
+for (question in questions) {
+  cat("------------------------------------------------------------\n")
+  cat("Q: ", question, "\n\n", sep = "")
+
+  rag_result <- query_rag(
+    question          = question,
+    collection        = collection,
+    top_k             = top_k,
+    embedding_model   = embedding_model,
+    chat_model        = chat_model,
+    temperature       = temperature,
+    max_output_tokens = max_output_tokens,
+    score_threshold   = score_threshold,
+    system_prompt     = system_prompt
+  )
+
+  cat("Answer:\n")
+  cat(rag_result$answer, "\n\n")
+
+  cat("Retrieved context (first few rows):\n")
+  print(utils::head(rag_result$retrieved))
+  cat("\n")
+}

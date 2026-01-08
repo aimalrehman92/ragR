@@ -16,15 +16,27 @@ library(ragR)
 
 qa_log_path     <- "db/qa_log.rds"
 collection_name <- "default"  # <-- CHANGE THIS to match your ingestion collection
+
+# Retrieval + model settings (exposed)
 top_k           <- 2L
+score_threshold <- 0           # keep chunks with score >= this (0 disables filtering)
+
 embedding_model <- "text-embedding-3-small"
 chat_model      <- "gpt-4o-mini"
 
+# Generation settings (exposed)
+temperature       <- 0
+max_output_tokens <- 300L
+
+# User-defined system prompt (exposed)
+system_prompt <- "You are a funny academic course assistant who finds humor in everything."
+
 # Add as many questions as you want to log in one run:
 questions <- c(
-  "What is the topic of this essay?"
-  # "Summarize the essay in two sentences.",
-  # "What are the key points mentioned?"
+  "What is the attendance policy for STAT 8670?",
+  "What is the attendance policy for STAT 8581?",
+  "Who is the professor for STAT 8670?",
+  "Is it the final exam or project for STAT 8670?"
 )
 
 # ----------------------------- Run -------------------------------------------
@@ -33,20 +45,37 @@ questions <- c(
 qa_log <- load_qa_log(qa_log_path)
 
 cat("Loaded QA log with", nrow(qa_log), "rows from:", qa_log_path, "\n")
-cat("Collection:", collection_name, "\n\n")
+cat("Settings:\n")
+cat("  Collection        :", collection_name, "\n")
+cat("  top_k             :", top_k, "\n")
+cat("  score_threshold   :", score_threshold, "\n")
+cat("  embedding_model   :", embedding_model, "\n")
+cat("  chat_model        :", chat_model, "\n")
+cat("  temperature       :", temperature, "\n")
+cat("  max_output_tokens :", max_output_tokens, "\n")
+cat("  system_prompt     :", system_prompt, "\n\n")
 
 # 2) Ask + log each question
 for (q in questions) {
   cat("Q:", q, "\n")
 
-  res <- query_rag(
-    question        = q,
-    collection      = collection_name,
-    top_k           = top_k,
-    embedding_model = embedding_model,
-    chat_model      = chat_model
+  # Build args explicitly so it’s obvious what’s being used
+  rag_args <- list(
+    question         = q,
+    collection       = collection_name,
+    top_k            = as.integer(top_k),
+    embedding_model  = embedding_model,
+    chat_model       = chat_model,
+    temperature      = temperature,
+    max_output_tokens = as.integer(max_output_tokens),
+    score_threshold  = score_threshold,
+    system_prompt    = system_prompt
   )
 
+  res <- do.call(query_rag, rag_args)
+
+  # Log interaction (schema is owned by qa_logging.R; we keep it aligned by
+  # passing what the logger currently accepts).
   qa_log <- log_rag_interaction(
     qa_log          = qa_log,
     question        = q,

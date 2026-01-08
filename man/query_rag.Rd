@@ -9,7 +9,11 @@ query_rag(
   collection = "default",
   top_k = 4L,
   embedding_model = "text-embedding-3-small",
-  chat_model = "gpt-4o-mini"
+  chat_model = "gpt-4o-mini",
+  temperature = 0,
+  max_output_tokens = NULL,
+  score_threshold = 0,
+  system_prompt = ""
 )
 }
 \arguments{
@@ -17,16 +21,25 @@ query_rag(
 
 \item{collection}{Vector store collection name.}
 
-\item{top_k}{Number of chunks to retrieve.}
+\item{top_k}{Integer; number of chunks to retrieve.}
 
-\item{embedding_model}{Embedding model for the question.}
+\item{embedding_model}{Character; embedding model for the question.}
 
-\item{chat_model}{Chat model for answer generation.}
+\item{chat_model}{Character; chat model for answer generation.}
+
+\item{temperature}{Numeric; sampling temperature for the chat model.}
+
+\item{max_output_tokens}{Integer or NULL; maximum output tokens for the chat model.}
+
+\item{score_threshold}{Numeric; minimum similarity score to keep a retrieved chunk.
+Applied only if \code{retrieved} includes a \code{score} column.}
+
+\item{system_prompt}{Character; system instruction prepended to the prompt.}
 }
 \value{
 A list with:
 \item{answer}{Model-generated answer}
-\item{retrieved}{Tibble of retrieved chunks}
+\item{retrieved}{Tibble of retrieved chunks (post-filtering)}
 \item{prompt}{Final prompt sent to the model}
 \item{model}{Model used}
 }
