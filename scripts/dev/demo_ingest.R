@@ -26,8 +26,9 @@ chunk_overlap     <- 50L
 embedding_model   <- "text-embedding-3-small"
 
 example_paths <- c(
-   "data-raw/STAT_8670_Syllabus.txt"
-  #"data-raw/happy_essay.pdf"
+   "data-raw/STAT_8670_Syllabus.txt",
+   "data-raw/STAT_8581_Syllabus.txt",
+   "data-raw/happy_essay.pdf"
 )
 
 # -----------------------------------------------

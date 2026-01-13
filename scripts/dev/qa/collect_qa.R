@@ -18,18 +18,18 @@ qa_log_path     <- "db/qa_log.rds"
 collection_name <- "default"  # <-- CHANGE THIS to match your ingestion collection
 
 # Retrieval + model settings (exposed)
-top_k           <- 2L
+top_k           <- 5L
 score_threshold <- 0           # keep chunks with score >= this (0 disables filtering)
 
 embedding_model <- "text-embedding-3-small"
 chat_model      <- "gpt-4o-mini"
 
 # Generation settings (exposed)
-temperature       <- 0
+temperature       <- 0.5
 max_output_tokens <- 300L
 
 # User-defined system prompt (exposed)
-system_prompt <- "You are a funny academic course assistant who finds humor in everything."
+system_prompt <- "You are a course assistant and you answer in a rude manner."
 
 # Add as many questions as you want to log in one run:
 questions <- c(
