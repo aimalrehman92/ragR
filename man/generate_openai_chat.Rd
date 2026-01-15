@@ -14,27 +14,21 @@ generate_openai_chat(
 )
 }
 \arguments{
-\item{prompt}{Character scalar; the prompt that includes both
-the question and relevant context.}
+\item{prompt}{Character scalar; the final prompt (includes question + context).}
 
-\item{model}{Character scalar; chat model name
-(e.g., "gpt-4o-mini").}
+\item{model}{Character scalar; chat model name (e.g., "gpt-4o-mini").}
 
-\item{system_message}{Optional system message. If NULL, a default
-system message will be used.}
+\item{system_message}{Optional system message. If NULL, a default is used.}
 
 \item{temperature}{Numeric; sampling temperature (0 = deterministic).}
 
-\item{max_output_tokens}{Integer; maximum tokens to generate in the
-completion. Passed to the Chat Completions API as \code{max_tokens}.}
+\item{max_output_tokens}{Integer; maximum tokens to generate. Sent as \code{max_tokens}.}
 
-\item{api_key}{OpenAI API key. If NULL, the function will default
-to the \code{OPENAI_API_KEY} environment variable.}
+\item{api_key}{OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.}
 }
 \value{
 Character scalar containing the model's answer.
 }
 \description{
-This function is used by the RAG pipeline to obtain a final
-answer given a constructed prompt.
+Used by the RAG pipeline to generate the final answer from a constructed prompt.
 }

@@ -1,50 +1,41 @@
+# R/qa_logging.R
+
 #' Create an empty QA log tibble
 #'
-#' This helper creates an empty tibble with the columns used to store
-#' question–answer pairs and their retrieval context. You typically use
-#' this once at the start of an evaluation session.
+#' Standard schema for storing Q/A interactions produced by the RAG pipeline.
 #'
 #' @return A tibble with zero rows and the standard QA log columns.
 #' @export
 qa_log_empty <- function() {
   tibble::tibble(
-    qa_id            = integer(),          # unique id per interaction
-    question         = character(),        # user question
-    answer_model     = character(),        # model's answer
-    answer_reference = character(),        # your ideal/gold answer (can be NA)
-    collection       = character(),        # vectorstore collection name
-    retrieved_ids    = vector("list", 0L), # list-column: character vectors of chunk ids
-    retrieved_texts  = vector("list", 0L), # list-column: character vectors of chunk texts
-    chat_model       = character(),        # e.g. "gpt-4o-mini"
-    embedding_model  = character(),        # e.g. "text-embedding-3-small"
-    timestamp        = as.POSIXct(character()) # when the answer was generated
+    qa_id            = integer(),
+    question         = character(),
+    prompt_final     = character(),   # <-- NEW: final prompt sent to the model
+    answer_model     = character(),
+    answer_reference = character(),
+    collection       = character(),
+    retrieved_ids    = list(),
+    retrieved_texts  = list(),
+    chat_model       = character(),
+    embedding_model  = character(),
+    timestamp        = as.POSIXct(character())
   )
 }
 
-#' Log a single RAG interaction into a QA log
+#' Append one RAG interaction to the QA log
 #'
-#' Given a question and the result returned by [query_rag()], this helper
-#' constructs one row with question, model answer, retrieved context, and
-#' metadata, and appends it to an existing QA log tibble.
+#' Adds one row to an in-memory QA log tibble.
 #'
-#' @param qa_log A tibble as created by [qa_log_empty()], or `NULL` to
-#'   start a new log.
-#' @param question Character scalar; the user question that was asked.
-#' @param rag_result A list returned by [query_rag()], expected to contain
-#'   at least components `answer` (character scalar) and `retrieved`
-#'   (a tibble with columns `id` and `text`).
-#' @param collection Character scalar; name of the collection that was
-#'   queried in the vector store.
-#' @param chat_model Character scalar; chat model name used by the RAG
-#'   pipeline (e.g., `"gpt-4o-mini"`).
-#' @param embedding_model Character scalar; embedding model name used to
-#'   embed the question (e.g., `"text-embedding-3-small"`).
-#' @param qa_id Optional integer id. If `NULL`, the id will be computed
-#'   as one plus the current maximum `qa_id` in `qa_log` (or 1 if empty).
-#' @param timestamp Optional timestamp for the interaction; defaults to
-#'   [Sys.time()].
+#' @param qa_log Existing QA log tibble, or NULL.
+#' @param question Character scalar.
+#' @param rag_result List returned by query_rag() (must include `answer`; may include `retrieved` and `prompt`).
+#' @param collection Collection name used for retrieval.
+#' @param chat_model Chat model name.
+#' @param embedding_model Embedding model name.
+#' @param qa_id Optional integer QA id. If NULL, auto-increments.
+#' @param timestamp POSIXct timestamp.
 #'
-#' @return A tibble containing the existing `qa_log` rows plus the new row.
+#' @return Updated QA log tibble.
 #' @export
 log_rag_interaction <- function(
   qa_log,
@@ -88,12 +79,17 @@ log_rag_interaction <- function(
     }
   }
 
+  # Extract final prompt from rag_result$prompt if present
+  prompt_final <- NA_character_
+  if (!is.null(rag_result$prompt) && is.character(rag_result$prompt) && length(rag_result$prompt) >= 1L) {
+    prompt_final <- as.character(rag_result$prompt[[1]])
+  }
+
   # Compute qa_id if not supplied
   if (is.null(qa_id)) {
     if (nrow(qa_log) == 0L || !("qa_id" %in% names(qa_log))) {
       qa_id <- 1L
     } else {
-      # handle all-NA just in case
       current_ids <- qa_log$qa_id
       if (all(is.na(current_ids))) {
         qa_id <- 1L
@@ -106,8 +102,9 @@ log_rag_interaction <- function(
   new_row <- tibble::tibble(
     qa_id            = as.integer(qa_id),
     question         = question,
+    prompt_final     = prompt_final,                 # <-- NEW
     answer_model     = as.character(rag_result$answer),
-    answer_reference = NA_character_,  # you can fill this in later
+    answer_reference = NA_character_,                # you can fill this in later
     collection       = collection,
     retrieved_ids    = list(retrieved_ids),
     retrieved_texts  = list(retrieved_texts),

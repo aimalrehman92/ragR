@@ -1,13 +1,14 @@
 # scripts/dev/demo_ingest.R
 #
 # Purpose:
-#   Ingest one file into the vector store using ragR (no HTTP API).
+#   Ingest one or more files into the vector store using ragR (no HTTP API).
 #
 # Usage (from project root):
 #   Rscript scripts/dev/demo_ingest.R
 #
 # Notes:
 #   - Set `chunking_strategy` to "character" or "sentence".
+#   - Raw text is minimally cleaned inside ingest_documents(): newlines -> spaces.
 #   - This script only performs ingestion; it does not ask questions.
 
 library(ragR)
@@ -17,18 +18,18 @@ library(ragR)
 collection_name   <- "default"
 
 # Choose one: "character" or "sentence"
-chunking_strategy <- "sentence"
+chunking_strategy <- "character"
 
 # Only used for character chunking:
-chunk_size        <- 500L
-chunk_overlap     <- 50L
+chunk_size        <- 700L
+chunk_overlap     <- 100L
 
 embedding_model   <- "text-embedding-3-small"
 
 example_paths <- c(
-   "data-raw/STAT_8670_Syllabus.txt",
-   "data-raw/STAT_8581_Syllabus.txt",
-   "data-raw/happy_essay.pdf"
+  "data-raw/STAT_8670_Syllabus.txt",
+  "data-raw/STAT_8581_Syllabus.txt",
+  "data-raw/happy_essay.pdf"
 )
 
 # -----------------------------------------------
@@ -48,13 +49,13 @@ cat("\nCollection:", collection_name, "\n")
 cat("Chunking strategy:", chunking_strategy, "\n\n")
 
 ingestion_result <- ingest_documents(
-  paths            = existing_paths,
-  collection       = collection_name,
-  chunk_size       = chunk_size,
-  chunk_overlap    = chunk_overlap,
+  paths             = existing_paths,
+  collection        = collection_name,
+  chunk_size        = chunk_size,
+  chunk_overlap     = chunk_overlap,
   chunking_strategy = chunking_strategy,
-  embedding_model  = embedding_model,
-  verbose          = TRUE
+  embedding_model   = embedding_model,
+  verbose           = TRUE
 )
 
 cat("\nIngestion finished.\n")

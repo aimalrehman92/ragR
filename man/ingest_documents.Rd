@@ -37,13 +37,20 @@ use a local dummy embedding generator (for offline development / tests).}
 A tibble with a per-file ingestion summary (\code{collection}, \code{path}, \code{n_chunks}).
 }
 \description{
-Reads PDF, DOCX, or TXT files, extracts text, chunks it, embeds chunks,
-and stores them in a vector store collection.
+Reads PDF, DOCX, or TXT files, extracts text, cleans it lightly, chunks it,
+embeds chunks, and stores them in a vector store collection.
 }
 \details{
 Chunking strategies:
 \itemize{
 \item \code{"character"}: overlapping fixed-size character windows.
 \item \code{"sentence"}: strict sentence splitting via \code{chunk_text_sentence()}.
+}
+
+Cleaning strategy (minimal, deterministic):
+\itemize{
+\item Replace \r and \n line breaks with spaces
+\item Collapse multiple whitespace to a single space
+\item Trim leading/trailing whitespace
 }
 }

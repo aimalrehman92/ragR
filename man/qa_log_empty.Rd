@@ -10,7 +10,5 @@ qa_log_empty()
 A tibble with zero rows and the standard QA log columns.
 }
 \description{
-This helper creates an empty tibble with the columns used to store
-question–answer pairs and their retrieval context. You typically use
-this once at the start of an evaluation session.
+Standard schema for storing Q/A interactions produced by the RAG pipeline.
 }

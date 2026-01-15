@@ -2,15 +2,12 @@
 
 #' Get embeddings from OpenAI
 #'
-#' This function calls the OpenAI embeddings endpoint to obtain
-#' vector representations for input texts. It is used by the ingestion
-#' pipeline and by the RAG query pipeline.
+#' Calls the OpenAI embeddings endpoint to obtain vector representations for
+#' one or more input texts. Used by both ingestion and query-time retrieval.
 #'
 #' @param texts Character vector of texts to embed.
-#' @param model Character scalar; embedding model name
-#'   (e.g., "text-embedding-3-small").
-#' @param api_key OpenAI API key. If NULL, uses the OPENAI_API_KEY
-#'   environment variable.
+#' @param model Character scalar; embedding model name (e.g., "text-embedding-3-small").
+#' @param api_key OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.
 #'
 #' @return A numeric matrix with one row per input text.
 #' @export
@@ -25,6 +22,9 @@ get_openai_embeddings <- function(
   if (length(texts) == 0L) {
     stop("texts must have length >= 1.", call. = FALSE)
   }
+  if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
+    stop("model must be a single non-empty character string.", call. = FALSE)
+  }
 
   if (is.null(api_key)) {
     api_key <- get_env_or_stop("OPENAI_API_KEY")
@@ -37,17 +37,24 @@ get_openai_embeddings <- function(
 
   req <- httr2::request("https://api.openai.com/v1/embeddings") |>
     httr2::req_headers(
-      Authorization = paste("Bearer", api_key),
+      Authorization  = paste("Bearer", api_key),
       `Content-Type` = "application/json"
     ) |>
     httr2::req_body_json(body)
 
   resp <- httr2::req_perform(req)
 
-  if (httr2::resp_status(resp) >= 300) {
+  status <- httr2::resp_status(resp)
+  if (status >= 300) {
+    msg <- NULL
+    try({
+      parsed_err <- httr2::resp_body_json(resp, simplifyVector = TRUE)
+      if (!is.null(parsed_err$error$message)) msg <- parsed_err$error$message
+    }, silent = TRUE)
+
     stop(
-      "OpenAI embeddings request failed with status ",
-      httr2::resp_status(resp),
+      "OpenAI embeddings request failed with status ", status, ". ",
+      if (!is.null(msg)) paste0("Server message: ", msg),
       call. = FALSE
     )
   }
@@ -59,7 +66,7 @@ get_openai_embeddings <- function(
   }
 
   emb_list <- lapply(parsed$data, function(d) {
-    unlist(d$embedding, use.names = FALSE)
+    as.numeric(unlist(d$embedding, use.names = FALSE))
   })
 
   emb_mat <- do.call(rbind, emb_list)
@@ -72,22 +79,17 @@ get_openai_embeddings <- function(
   emb_mat
 }
 
+
 #' Generate a chat completion from OpenAI
 #'
-#' This function is used by the RAG pipeline to obtain a final
-#' answer given a constructed prompt.
+#' Used by the RAG pipeline to generate the final answer from a constructed prompt.
 #'
-#' @param prompt Character scalar; the prompt that includes both
-#'   the question and relevant context.
-#' @param model Character scalar; chat model name
-#'   (e.g., "gpt-4o-mini").
-#' @param system_message Optional system message. If NULL, a default
-#'   system message will be used.
+#' @param prompt Character scalar; the final prompt (includes question + context).
+#' @param model Character scalar; chat model name (e.g., "gpt-4o-mini").
+#' @param system_message Optional system message. If NULL, a default is used.
 #' @param temperature Numeric; sampling temperature (0 = deterministic).
-#' @param max_output_tokens Integer; maximum tokens to generate in the
-#'   completion. Passed to the Chat Completions API as `max_tokens`.
-#' @param api_key OpenAI API key. If NULL, the function will default
-#'   to the \code{OPENAI_API_KEY} environment variable.
+#' @param max_output_tokens Integer; maximum tokens to generate. Sent as `max_tokens`.
+#' @param api_key OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.
 #'
 #' @return Character scalar containing the model's answer.
 #' @export
@@ -102,16 +104,12 @@ generate_openai_chat <- function(
   if (!is.character(prompt) || length(prompt) != 1L) {
     stop("prompt must be a single character string.", call. = FALSE)
   }
+  if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
+    stop("model must be a single non-empty character string.", call. = FALSE)
+  }
 
-  if (!is.numeric(temperature) || length(temperature) != 1L) {
-    stop("temperature must be a single numeric value.", call. = FALSE)
-  }
-  if (is.na(temperature) || temperature < 0) {
-    stop("temperature must be >= 0.", call. = FALSE)
-  }
-  # Optional strictness:
-  if (!is.na(temperature) && temperature > 2) {
-    stop("temperature must be <= 2.", call. = FALSE)
+  if (!is.numeric(temperature) || length(temperature) != 1L || is.na(temperature) || temperature < 0) {
+    stop("temperature must be a single numeric value >= 0.", call. = FALSE)
   }
 
   if (!is.numeric(max_output_tokens) || length(max_output_tokens) != 1L) {
@@ -127,7 +125,10 @@ generate_openai_chat <- function(
   }
 
   if (is.null(system_message)) {
-    system_message <- "You are a helpful assistant that answers based only on the provided context. If the context is insufficient, say so explicitly."
+    system_message <- paste(
+      "You are a helpful assistant that answers based only on the provided context.",
+      "If the context is insufficient, say \"I don't know based on the provided context.\""
+    )
   }
 
   body <- list(
@@ -154,9 +155,7 @@ generate_openai_chat <- function(
     msg <- NULL
     try({
       parsed_err <- httr2::resp_body_json(resp, simplifyVector = TRUE)
-      if (!is.null(parsed_err$error$message)) {
-        msg <- parsed_err$error$message
-      }
+      if (!is.null(parsed_err$error$message)) msg <- parsed_err$error$message
     }, silent = TRUE)
 
     stop(
@@ -173,16 +172,10 @@ generate_openai_chat <- function(
     stop("Unexpected response format from OpenAI chat API: no choices.", call. = FALSE)
   }
 
-  first_choice <- choices[[1]]
-  message_obj  <- first_choice$message
-
+  message_obj <- choices[[1]]$message
   if (is.list(message_obj) && !is.null(message_obj$content)) {
-    answer <- message_obj$content
-  } else if (is.character(message_obj)) {
-    answer <- message_obj
-  } else {
-    stop("OpenAI chat API returned an unexpected message structure.", call. = FALSE)
+    return(as.character(message_obj$content))
   }
 
-  as.character(answer)
+  stop("OpenAI chat API returned an unexpected message structure.", call. = FALSE)
 }

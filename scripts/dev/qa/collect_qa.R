@@ -1,7 +1,8 @@
 # scripts/dev/qa/collect_qa.R
 #
 # Purpose:
-#   Collect Q/A interactions using ragR (library mode) and append them to qa_log.rds.
+#   Collect Q/A interactions using ragR (library mode) and append them to qa_log.rds,
+#   including the final prompt that was sent to the chat model.
 #
 # Usage (from project root):
 #   Rscript scripts/dev/qa/collect_qa.R
@@ -29,14 +30,15 @@ temperature       <- 0.5
 max_output_tokens <- 300L
 
 # User-defined system prompt (exposed)
-system_prompt <- "You are a course assistant and you answer in a rude manner."
+system_prompt <- "You are a helpful assistant."
 
 # Add as many questions as you want to log in one run:
 questions <- c(
   "What is the attendance policy for STAT 8670?",
   "What is the attendance policy for STAT 8581?",
   "Who is the professor for STAT 8670?",
-  "Is it the final exam or project for STAT 8670?"
+  "Is it the final exam or project for STAT 8670?",
+  "What do you know about happiness?"
 )
 
 # ----------------------------- Run -------------------------------------------
@@ -59,23 +61,21 @@ cat("  system_prompt     :", system_prompt, "\n\n")
 for (q in questions) {
   cat("Q:", q, "\n")
 
-  # Build args explicitly so it’s obvious what’s being used
   rag_args <- list(
-    question         = q,
-    collection       = collection_name,
-    top_k            = as.integer(top_k),
-    embedding_model  = embedding_model,
-    chat_model       = chat_model,
-    temperature      = temperature,
+    question          = q,
+    collection        = collection_name,
+    top_k             = as.integer(top_k),
+    embedding_model   = embedding_model,
+    chat_model        = chat_model,
+    temperature       = temperature,
     max_output_tokens = as.integer(max_output_tokens),
-    score_threshold  = score_threshold,
-    system_prompt    = system_prompt
+    score_threshold   = score_threshold,
+    system_prompt     = system_prompt
   )
 
   res <- do.call(query_rag, rag_args)
 
-  # Log interaction (schema is owned by qa_logging.R; we keep it aligned by
-  # passing what the logger currently accepts).
+  # Logger now also stores rag_result$prompt into qa_log as `prompt_final`.
   qa_log <- log_rag_interaction(
     qa_log          = qa_log,
     question        = q,

@@ -2,7 +2,7 @@
 % Please edit documentation in R/qa_logging.R
 \name{log_rag_interaction}
 \alias{log_rag_interaction}
-\title{Log a single RAG interaction into a QA log}
+\title{Append one RAG interaction to the QA log}
 \usage{
 log_rag_interaction(
   qa_log,
@@ -16,35 +16,25 @@ log_rag_interaction(
 )
 }
 \arguments{
-\item{qa_log}{A tibble as created by \code{\link[=qa_log_empty]{qa_log_empty()}}, or \code{NULL} to
-start a new log.}
+\item{qa_log}{Existing QA log tibble, or NULL.}
 
-\item{question}{Character scalar; the user question that was asked.}
+\item{question}{Character scalar.}
 
-\item{rag_result}{A list returned by \code{\link[=query_rag]{query_rag()}}, expected to contain
-at least components \code{answer} (character scalar) and \code{retrieved}
-(a tibble with columns \code{id} and \code{text}).}
+\item{rag_result}{List returned by query_rag() (must include \code{answer}; may include \code{retrieved} and \code{prompt}).}
 
-\item{collection}{Character scalar; name of the collection that was
-queried in the vector store.}
+\item{collection}{Collection name used for retrieval.}
 
-\item{chat_model}{Character scalar; chat model name used by the RAG
-pipeline (e.g., \code{"gpt-4o-mini"}).}
+\item{chat_model}{Chat model name.}
 
-\item{embedding_model}{Character scalar; embedding model name used to
-embed the question (e.g., \code{"text-embedding-3-small"}).}
+\item{embedding_model}{Embedding model name.}
 
-\item{qa_id}{Optional integer id. If \code{NULL}, the id will be computed
-as one plus the current maximum \code{qa_id} in \code{qa_log} (or 1 if empty).}
+\item{qa_id}{Optional integer QA id. If NULL, auto-increments.}
 
-\item{timestamp}{Optional timestamp for the interaction; defaults to
-\code{\link[=Sys.time]{Sys.time()}}.}
+\item{timestamp}{POSIXct timestamp.}
 }
 \value{
-A tibble containing the existing \code{qa_log} rows plus the new row.
+Updated QA log tibble.
 }
 \description{
-Given a question and the result returned by \code{\link[=query_rag]{query_rag()}}, this helper
-constructs one row with question, model answer, retrieved context, and
-metadata, and appends it to an existing QA log tibble.
+Adds one row to an in-memory QA log tibble.
 }

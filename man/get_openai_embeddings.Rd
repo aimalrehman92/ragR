@@ -9,17 +9,14 @@ get_openai_embeddings(texts, model = "text-embedding-3-small", api_key = NULL)
 \arguments{
 \item{texts}{Character vector of texts to embed.}
 
-\item{model}{Character scalar; embedding model name
-(e.g., "text-embedding-3-small").}
+\item{model}{Character scalar; embedding model name (e.g., "text-embedding-3-small").}
 
-\item{api_key}{OpenAI API key. If NULL, uses the OPENAI_API_KEY
-environment variable.}
+\item{api_key}{OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.}
 }
 \value{
 A numeric matrix with one row per input text.
 }
 \description{
-This function calls the OpenAI embeddings endpoint to obtain
-vector representations for input texts. It is used by the ingestion
-pipeline and by the RAG query pipeline.
+Calls the OpenAI embeddings endpoint to obtain vector representations for
+one or more input texts. Used by both ingestion and query-time retrieval.
 }

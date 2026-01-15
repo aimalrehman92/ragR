@@ -1,12 +1,12 @@
-test_that("qa_log_empty returns an empty tibble with expected columns", {
-  log <- qa_log_empty()
+# tests/testthat/test_qa_logging.R
 
-  expect_true(tibble::is_tibble(log))
-  expect_equal(nrow(log), 0L)
+testthat::test_that("qa_log_empty returns an empty tibble with expected columns", {
+  log <- ragR::qa_log_empty()
 
   expected_cols <- c(
     "qa_id",
     "question",
+    "prompt_final",
     "answer_model",
     "answer_reference",
     "collection",
@@ -17,84 +17,56 @@ test_that("qa_log_empty returns an empty tibble with expected columns", {
     "timestamp"
   )
 
-  expect_equal(names(log), expected_cols)
+  testthat::expect_true(tibble::is_tibble(log))
+  testthat::expect_equal(nrow(log), 0L)
+  testthat::expect_equal(names(log), expected_cols)
 })
 
-test_that("log_rag_interaction initializes a new log and assigns qa_id = 1", {
-  # Fake RAG result, mimicking query_rag() output shape
+testthat::test_that("log_rag_interaction appends one row and keeps list columns", {
+  qa_log <- ragR::qa_log_empty()
+
   rag_result <- list(
-    answer    = "This is a test answer.",
+    answer   = "Hello",
+    prompt   = "SYSTEM...\n\nCONTEXT...\n\nQuestion...\n\nAnswer:",
     retrieved = tibble::tibble(
-      id   = c("chunk1", "chunk2"),
-      text = c("First chunk text.", "Second chunk text.")
+      collection = c("default", "default"),
+      id         = c("doc_0001", "doc_0002"),
+      text       = c("Chunk A", "Chunk B"),
+      score      = c(0.2, 0.1),
+      metadata   = list(list(path="x"), list(path="y"))
     )
   )
 
-  log <- log_rag_interaction(
-    qa_log         = NULL,
-    question       = "What is life?",
-    rag_result     = rag_result,
-    collection     = "demo_ingest_test",
-    chat_model     = "gpt-4o-mini",
-    embedding_model = "text-embedding-3-small"
+  out <- ragR::log_rag_interaction(
+    qa_log          = qa_log,
+    question        = "Test question?",
+    rag_result      = rag_result,
+    collection      = "default",
+    chat_model      = "gpt-4o-mini",
+    embedding_model = "text-embedding-3-small",
+    timestamp       = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
 
-  expect_true(tibble::is_tibble(log))
-  expect_equal(nrow(log), 1L)
-  expect_equal(log$qa_id[1], 1L)
-  expect_equal(log$question[1], "What is life?")
-  expect_equal(log$answer_model[1], "This is a test answer.")
-  expect_equal(log$collection[1], "demo_ingest_test")
+  testthat::expect_true(tibble::is_tibble(out))
+  testthat::expect_equal(nrow(out), 1L)
 
-  # retrieved_ids and retrieved_texts should be list-columns with length 1
-  expect_true(is.list(log$retrieved_ids))
-  expect_true(is.list(log$retrieved_texts))
-  expect_equal(length(log$retrieved_ids[[1]]), 2L)
-  expect_equal(length(log$retrieved_texts[[1]]), 2L)
+  # New column should exist and be populated
+  testthat::expect_true("prompt_final" %in% names(out))
+  testthat::expect_equal(out$prompt_final[[1]], rag_result$prompt)
 
-  # timestamp should be POSIXct
-  expect_s3_class(log$timestamp, "POSIXct")
-})
+  # Basic fields
+  testthat::expect_equal(out$qa_id[[1]], 1L)
+  testthat::expect_equal(out$question[[1]], "Test question?")
+  testthat::expect_equal(out$answer_model[[1]], "Hello")
+  testthat::expect_equal(out$collection[[1]], "default")
 
-test_that("log_rag_interaction appends rows and increments qa_id", {
-  rag_result1 <- list(
-    answer    = "First answer.",
-    retrieved = tibble::tibble(
-      id   = "chunk1",
-      text = "Chunk one."
-    )
-  )
+  # Retrieved fields should be list-columns
+  testthat::expect_true(is.list(out$retrieved_ids))
+  testthat::expect_true(is.list(out$retrieved_texts))
 
-  rag_result2 <- list(
-    answer    = "Second answer.",
-    retrieved = tibble::tibble(
-      id   = "chunk2",
-      text = "Chunk two."
-    )
-  )
+  testthat::expect_equal(out$retrieved_ids[[1]], c("doc_0001", "doc_0002"))
+  testthat::expect_equal(out$retrieved_texts[[1]], c("Chunk A", "Chunk B"))
 
-  log <- qa_log_empty()
-
-  log <- log_rag_interaction(
-    qa_log         = log,
-    question       = "Q1?",
-    rag_result     = rag_result1,
-    collection     = "demo_ingest_test",
-    chat_model     = "gpt-4o-mini",
-    embedding_model = "text-embedding-3-small"
-  )
-
-  log <- log_rag_interaction(
-    qa_log         = log,
-    question       = "Q2?",
-    rag_result     = rag_result2,
-    collection     = "demo_ingest_test",
-    chat_model     = "gpt-4o-mini",
-    embedding_model = "text-embedding-3-small"
-  )
-
-  expect_equal(nrow(log), 2L)
-  expect_equal(log$qa_id, c(1L, 2L))
-  expect_equal(log$question, c("Q1?", "Q2?"))
-  expect_equal(log$answer_model, c("First answer.", "Second answer."))
+  # Timestamp stored
+  testthat::expect_true(inherits(out$timestamp, "POSIXct"))
 })

@@ -58,7 +58,6 @@ query_rag <- function(
     model = embedding_model
   )
 
-  # get_openai_embeddings() returns a matrix (1 x d); convert to numeric vector
   query_embedding <- as.numeric(q_emb_mat[1, ])
 
   # 2) Query the vector store
@@ -72,7 +71,7 @@ query_rag <- function(
     stop("vectorstore_query() returned no results.", call. = FALSE)
   }
 
-  # 2b) Optional score threshold filter (only if 'score' exists)
+  # 2b) Optional score threshold filter
   if ("score" %in% names(retrieved)) {
     retrieved <- retrieved[!is.na(retrieved$score) & retrieved$score >= score_threshold, , drop = FALSE]
   }
@@ -81,16 +80,17 @@ query_rag <- function(
     stop("No retrieved chunks passed score_threshold.", call. = FALSE)
   }
 
-  # 3) Build prompt (now supports user-provided system_prompt)
+  # 3) Build prompt (supports user-provided system_prompt)
   prompt <- build_rag_prompt(
-    question       = question,
-    retrieved      = retrieved,
-    system_prompt  = system_prompt
+    question      = question,
+    retrieved     = retrieved,
+    system_prompt = system_prompt
   )
 
+  # Ensure prompt is a single string (defensive)
+  prompt <- as.character(prompt[[1]])
+
   # 4) Call chat model
-  # NOTE: generate_openai_chat() must support these args; if your implementation
-  # uses different names, tell me its signature and I’ll align it.
   answer <- generate_openai_chat(
     prompt            = prompt,
     model             = chat_model,
@@ -99,76 +99,11 @@ query_rag <- function(
     max_output_tokens = max_output_tokens
   )
 
-
-  # 5) Return structured result
+  # 5) Return structured result (includes final prompt for logging)
   list(
     answer    = answer,
     retrieved = retrieved,
     prompt    = prompt,
     model     = chat_model
   )
-}
-
-#' Build a RAG prompt from question and retrieved chunks
-#'
-#' @param question Character scalar.
-#' @param retrieved A tibble/data frame of retrieved chunks.
-#' @param system_prompt Character; system instruction prepended to the prompt.
-#'
-#' @return Character scalar: the constructed prompt.
-#' @keywords internal
-build_rag_prompt <- function(
-  question,
-  retrieved,
-  system_prompt = ""
-) {
-  if (!is.character(question) || length(question) != 1L) {
-    stop("question must be a single character string.", call. = FALSE)
-  }
-  if (!is.data.frame(retrieved) || nrow(retrieved) == 0L) {
-    stop("retrieved must be a non-empty data frame.", call. = FALSE)
-  }
-  if (!is.character(system_prompt) || length(system_prompt) != 1L) {
-    stop("system_prompt must be a single character string.", call. = FALSE)
-  }
-
-  # Find the column that holds chunk text
-  text_col <- NULL
-  if ("document" %in% names(retrieved)) {
-    text_col <- "document"
-  } else if ("text" %in% names(retrieved)) {
-    text_col <- "text"
-  } else {
-    stop(
-      "retrieved must have a 'document' or 'text' column containing chunk text.",
-      call. = FALSE
-    )
-  }
-
-  contexts <- retrieved[[text_col]]
-
-  context_block <- paste0(
-    "Chunk ", seq_along(contexts), ":\n",
-    contexts,
-    collapse = "\n\n"
-  )
-
-  # Ensure system prompt ends with a blank line if provided
-  sys <- ""
-  if (nzchar(trimws(system_prompt))) {
-    sys <- paste0(system_prompt, "\n\n")
-  }
-
-  Prompt <- paste0(
-    sys,
-    "You are given the following context passages:\n\n",
-    context_block,
-    "\n\nUsing ONLY the information in the context above, answer the question below.\n",
-    "If the context does not contain the answer, say \"I don't know based on the provided context.\"\n\n",
-    "Question:\n",
-    question,
-    "\n\nAnswer:"
-  )
-
-  Prompt
 }

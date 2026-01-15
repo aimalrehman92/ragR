@@ -2,12 +2,17 @@
 
 #' Ingest documents into the vector store
 #'
-#' Reads PDF, DOCX, or TXT files, extracts text, chunks it, embeds chunks,
-#' and stores them in a vector store collection.
+#' Reads PDF, DOCX, or TXT files, extracts text, cleans it lightly, chunks it,
+#' embeds chunks, and stores them in a vector store collection.
 #'
 #' Chunking strategies:
 #' - `"character"`: overlapping fixed-size character windows.
 #' - `"sentence"`: strict sentence splitting via `chunk_text_sentence()`.
+#'
+#' Cleaning strategy (minimal, deterministic):
+#' - Replace \r and \n line breaks with spaces
+#' - Collapse multiple whitespace to a single space
+#' - Trim leading/trailing whitespace
 #'
 #' @param paths Character vector of file paths to ingest.
 #' @param collection Character scalar; name of the collection.
@@ -52,7 +57,10 @@ ingest_documents <- function(
   for (p in paths) {
     if (verbose) message("Ingesting file: ", p)
 
-    txt <- extract_text(p)
+    raw_txt <- extract_text(p)
+
+    # --- NEW: minimal cleaning applied consistently before chunking ---
+    txt <- clean_raw_text(raw_txt)
 
     chunks <- switch(
       chunking_strategy,
@@ -64,7 +72,7 @@ ingest_documents <- function(
       sentence = chunk_text_sentence(text = txt)
     )
 
-    # ---- FIX: normalize chunks FIRST, THEN compute n_chunks ----
+    # Normalize chunks defensively
     chunks <- unlist(chunks, use.names = FALSE)
     chunks <- as.character(chunks)
     chunks <- trimws(chunks)
@@ -99,10 +107,18 @@ ingest_documents <- function(
 
   # Embeddings
   if (use_openai) {
-    embeddings <- get_openai_embeddings(
-      texts = chunks_df$text,
-      model = embedding_model
-    )
+    # Robust to naming differences, so ingest won't break if you renamed the helper elsewhere.
+    if (exists("get_openai_embeddings", mode = "function")) {
+      embeddings <- get_openai_embeddings(texts = chunks_df$text, model = embedding_model)
+    } else if (exists("get_openai_embeddings_openai", mode = "function")) {
+      embeddings <- get_openai_embeddings_openai(texts = chunks_df$text, model = embedding_model)
+    } else {
+      stop(
+        "OpenAI embedding helper not found. Expected `get_openai_embeddings()` ",
+        "or `get_openai_embeddings_openai()` to exist in the package.",
+        call. = FALSE
+      )
+    }
   } else {
     if (verbose) message("Using dummy embeddings (no OpenAI call).")
     embeddings <- dummy_embeddings(chunks_df$text, dims = 16L)
@@ -133,6 +149,26 @@ ingest_documents <- function(
   summary_df
 }
 
+# --- NEW: minimal text cleaning -----------------------------------------------
+
+#' Clean raw extracted text (minimal)
+#'
+#' - Replaces \r and \n with spaces
+#' - Collapses multiple whitespace
+#' - Trims
+#'
+#' @param text Character scalar
+#' @return Cleaned character scalar
+#' @keywords internal
+clean_raw_text <- function(text) {
+  if (!is.character(text) || length(text) != 1L) {
+    stop("text must be a single character string.", call. = FALSE)
+  }
+  x <- text
+  x <- gsub("[\r\n]+", " ", x)
+  x <- gsub("\\s+", " ", x)
+  trimws(x)
+}
 
 #' Extract text from a document
 #'
@@ -208,7 +244,7 @@ chunk_text_character <- function(text, chunk_size = 500L, chunk_overlap = 50L) {
   unlist(chunks, use.names = FALSE)
 }
 
-# --- Chunking: sentence packing -----------------------------------------------
+# --- Chunking: sentence splitting (strict-ish) --------------------------------
 
 #' Chunk text into sentences (strict)
 #'
@@ -224,19 +260,11 @@ chunk_text_sentence <- function(text) {
     stop("text must be a single character string.", call. = FALSE)
   }
 
-  x <- text
-
-  # Normalize whitespace/newlines a bit (PDFs often have odd line breaks)
-  x <- gsub("[\r\n]+", " ", x)
-  x <- gsub("\\s+", " ", x)
-  x <- trimws(x)
-
+  x <- trimws(text)
   if (!nzchar(x)) {
     return(character(0L))
   }
 
-  # Split after sentence-ending punctuation followed by whitespace
-  # (best-effort, deterministic)
   parts <- unlist(strsplit(x, "(?<=[.!?])\\s+", perl = TRUE), use.names = FALSE)
   parts <- trimws(parts)
   parts <- parts[nzchar(parts)]
