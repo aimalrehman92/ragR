@@ -21,8 +21,8 @@ collection_name   <- "default"
 chunking_strategy <- "character"
 
 # Only used for character chunking:
-chunk_size        <- 700L
-chunk_overlap     <- 100L
+chunk_size        <- 1500L
+chunk_overlap     <- 500L
 
 embedding_model   <- "text-embedding-3-small"
 

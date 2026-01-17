@@ -17,7 +17,7 @@ library(ragR)
 # ----------------------------- Config ----------------------------------------
 
 # Choose which metric implementation to use:
-USE_LLM_METRICS <- FALSE  # TRUE = LLM-based ("actual"), FALSE = approximations
+USE_LLM_METRICS <- TRUE # TRUE = LLM-based ("actual"), FALSE = approximations
 
 qa_log_path     <- "db/qa_log.rds"
 qa_metrics_path <- "db/qa_metrics.rds"

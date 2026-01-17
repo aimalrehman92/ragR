@@ -107,3 +107,68 @@ query_rag <- function(
     model     = chat_model
   )
 }
+
+
+#' Build a RAG prompt from question and retrieved chunks
+#'
+#' @param question Character scalar.
+#' @param retrieved A tibble/data frame of retrieved chunks.
+#' @param system_prompt Character; system instruction prepended to the prompt.
+#'
+#' @return Character scalar: the constructed prompt.
+#' @keywords internal
+build_rag_prompt <- function(
+  question,
+  retrieved,
+  system_prompt = ""
+) {
+  if (!is.character(question) || length(question) != 1L) {
+    stop("question must be a single character string.", call. = FALSE)
+  }
+  if (!is.data.frame(retrieved) || nrow(retrieved) == 0L) {
+    stop("retrieved must be a non-empty data frame.", call. = FALSE)
+  }
+  if (!is.character(system_prompt) || length(system_prompt) != 1L) {
+    stop("system_prompt must be a single character string.", call. = FALSE)
+  }
+
+  # Find the column that holds chunk text
+  text_col <- NULL
+  if ("document" %in% names(retrieved)) {
+    text_col <- "document"
+  } else if ("text" %in% names(retrieved)) {
+    text_col <- "text"
+  } else {
+    stop(
+      "retrieved must have a 'document' or 'text' column containing chunk text.",
+      call. = FALSE
+    )
+  }
+
+  contexts <- retrieved[[text_col]]
+
+  context_block <- paste0(
+    #"Chunk ", seq_along(contexts), ":\n",
+    contexts,
+    collapse = "\n\n"
+  )
+
+  # Ensure system prompt ends with a blank line if provided
+  sys <- ""
+  if (nzchar(trimws(system_prompt))) {
+    sys <- paste0(system_prompt, "\n\n")
+  }
+
+  Prompt <- paste0(
+    sys,
+    "You are given the following context passages:\n\n",
+    context_block,
+    "\n\nUsing ONLY the information in the context above, answer the question below.\n",
+    "If the context does not contain the answer, say \"I don't know based on the provided context.\"\n\n",
+    "Question:\n",
+    question,
+    "\n\nAnswer:"
+  )
+
+  Prompt
+}

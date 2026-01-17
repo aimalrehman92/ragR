@@ -19,7 +19,7 @@ qa_metrics_path <- "db/qa_metrics.rds"
 # Choose which metric implementation to use:
 #   TRUE  -> LLM-based "actual" metrics (requires OPENAI_API_KEY etc.)
 #   FALSE -> deterministic lexical approximations (no LLM calls)
-USE_LLM_METRICS <- FALSE
+USE_LLM_METRICS <- TRUE
 
 # ----------------------------- Run -------------------------------------------
 
