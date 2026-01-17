@@ -2,26 +2,39 @@
 % Please edit documentation in R/ragas_metrics.R
 \name{compute_ragas_metrics_llm}
 \alias{compute_ragas_metrics_llm}
-\title{Compute RAGAS-style metrics (LLM scored)}
+\title{Compute RAGAS-style metrics (LLM scored, rubric-defined)}
 \usage{
-compute_ragas_metrics_llm(qa_log, judge_model = "gpt-4o-mini")
+compute_ragas_metrics_llm(
+  qa_log,
+  judge_model = "gpt-4o-mini",
+  judge_temperature = 0
+)
 }
 \arguments{
 \item{qa_log}{A tibble created and populated by \code{\link[=log_rag_interaction]{log_rag_interaction()}}.}
 
 \item{judge_model}{Character scalar; judge model name (default: "gpt-4o-mini").}
+
+\item{judge_temperature}{Numeric; default 0 for deterministic scoring.}
 }
 \value{
 A tibble with one row per \code{qa_id} and metric columns.
 }
 \description{
-This is an LLM-based scoring implementation: it asks a judge model to score
-each metric in \eqn{[0,1]} from the QA log’s question/answer/retrieved contexts.
+Implements RAGAS-style metrics using an LLM judge with explicit rubrics:
+\itemize{
+\item Context Precision: fraction of retrieved chunks relevant to the question.
+\item Context Recall: fraction of ground-truth keypoints covered by retrieved contexts.
+\item Answer Relevance: relevance of answer to question (not correctness).
+\item Faithfulness: fraction of answer claims supported by retrieved contexts.
+}
 }
 \details{
-Notes:
+IMPORTANT:
 \itemize{
-\item If \code{answer_reference} exists and is non-NA, it may be used as ground truth.
-\item Requires an OpenAI API key via \code{OPENAI_API_KEY}.
+\item \code{context_recall} REQUIRES \code{answer_reference} (ground truth). If missing/NA,
+context_recall is returned as NA_real_ for that row.
 }
+
+Requires an OpenAI API key via \code{OPENAI_API_KEY}.
 }

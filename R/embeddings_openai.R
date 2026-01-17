@@ -89,6 +89,8 @@ get_openai_embeddings <- function(
 #' @param system_message Optional system message. If NULL, a default is used.
 #' @param temperature Numeric; sampling temperature (0 = deterministic).
 #' @param max_output_tokens Integer; maximum tokens to generate. Sent as `max_tokens`.
+#' @param response_format Optional list; passed to the API as `response_format` to
+#'   enable JSON mode / structured outputs. For JSON mode use list(type="json_object").
 #' @param api_key OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.
 #'
 #' @return Character scalar containing the model's answer.
@@ -99,6 +101,7 @@ generate_openai_chat <- function(
   system_message    = NULL,
   temperature       = 0,
   max_output_tokens = 512L,
+  response_format   = NULL,
   api_key           = NULL
 ) {
   if (!is.character(prompt) || length(prompt) != 1L) {
@@ -118,6 +121,12 @@ generate_openai_chat <- function(
   max_output_tokens <- as.integer(max_output_tokens)
   if (is.na(max_output_tokens) || max_output_tokens <= 0L) {
     stop("max_output_tokens must be a positive integer.", call. = FALSE)
+  }
+
+  if (!is.null(response_format)) {
+    if (!is.list(response_format) || is.null(response_format$type) || !is.character(response_format$type)) {
+      stop("response_format must be NULL or a list with at least a character field `type`.", call. = FALSE)
+    }
   }
 
   if (is.null(api_key)) {
@@ -140,6 +149,10 @@ generate_openai_chat <- function(
     temperature = temperature,
     max_tokens  = max_output_tokens
   )
+
+  if (!is.null(response_format)) {
+    body$response_format <- response_format
+  }
 
   req <- httr2::request("https://api.openai.com/v1/chat/completions") |>
     httr2::req_headers(

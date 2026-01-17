@@ -49,7 +49,7 @@ Chunking strategies:
 
 Cleaning strategy (minimal, deterministic):
 \itemize{
-\item Replace \r and \n line breaks with spaces
+\item Replace \verb{\\r} and \verb{\\n}line breaks with spaces
 \item Collapse multiple whitespace to a single space
 \item Trim leading/trailing whitespace
 }

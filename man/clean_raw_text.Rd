@@ -14,7 +14,7 @@ Cleaned character scalar
 }
 \description{
 \itemize{
-\item Replaces \r and \n with spaces
+\item Replaces \verb{\\r} and \verb{\\n} with spaces
 \item Collapses multiple whitespace
 \item Trims
 }

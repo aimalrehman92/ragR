@@ -108,71 +108,9 @@ compute_ragas_metrics_approx <- function(qa_log) {
   dplyr::bind_rows(metric_rows)
 }
 
-# ---- LLM-BASED "ACTUAL" METRICS (SCORING) -----------------------------------
+# ---- LLM-BASED METRICS (CANONICAL, RUBRIC-DEFINED) --------------------------
 
-# Internal: parse numeric score from model response (robust-ish)
-parse_score_01 <- function(x) {
-  if (is.null(x) || !is.character(x) || length(x) != 1L) return(NA_real_)
-  # try JSON first
-  out <- suppressWarnings({
-    tryCatch(jsonlite::fromJSON(x), error = function(e) NULL)
-  })
-  if (is.list(out) && !is.null(out$score)) {
-    s <- suppressWarnings(as.numeric(out$score))
-    if (!is.na(s)) return(max(0, min(1, s)))
-  }
-  # fallback: first number in text
-  m <- regmatches(x, regexpr("[0-9]*\\.?[0-9]+", x))
-  s <- suppressWarnings(as.numeric(m))
-  if (is.na(s)) return(NA_real_)
-  max(0, min(1, s))
-}
-
-# Internal: score one metric with OpenAI chat (expects generate_openai_chat in embeddings_openai.R)
-score_metric_llm <- function(metric_name, question, answer, contexts, ground_truth = NULL, model = "gpt-4o-mini") {
-  ctx_block <- paste0("- ", contexts, collapse = "\n")
-  gt_line <- if (!is.null(ground_truth) && is.character(ground_truth) && length(ground_truth) == 1L && nzchar(ground_truth)) {
-    paste0("\nGround truth answer:\n", ground_truth, "\n")
-  } else {
-    ""
-  }
-
-  prompt <- paste0(
-    "You are scoring a RAG evaluation metric. Return ONLY valid JSON: {\"score\": <number between 0 and 1>}.\n\n",
-    "Metric to score: ", metric_name, "\n\n",
-    "Question:\n", question, "\n\n",
-    "Model answer:\n", answer, "\n\n",
-    "Retrieved contexts:\n", ctx_block, "\n",
-    gt_line,
-    "\nScoring guidance:\n",
-    "- Use 0 for worst, 1 for best.\n",
-    "- Be strict and consistent.\n"
-  )
-
-  raw <- generate_openai_chat(prompt = prompt, model = model, temperature = 0)
-  parse_score_01(raw)
-}
-
-#' Compute RAGAS-style metrics (LLM scored)
-#'
-#' This is an LLM-based scoring implementation: it asks a judge model to score
-#' each metric in \eqn{[0,1]} from the QA log’s question/answer/retrieved contexts.
-#'
-#' Notes:
-#' - If `answer_reference` exists and is non-NA, it may be used as ground truth.
-#' - Requires an OpenAI API key via `OPENAI_API_KEY`.
-#'
-#' @param qa_log A tibble created and populated by [log_rag_interaction()].
-#' @param judge_model Character scalar; judge model name (default: "gpt-4o-mini").
-#'
-#' @return A tibble with one row per `qa_id` and metric columns.
-#' @export
-compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini") {
-  if (is.null(qa_log) || nrow(qa_log) == 0L) {
-    return(qa_metrics_empty())
-  }
-
-  required_cols <- c("qa_id", "question", "answer_model", "retrieved_texts")
+.assert_required_cols <- function(qa_log, required_cols) {
   missing_cols <- setdiff(required_cols, names(qa_log))
   if (length(missing_cols) > 0L) {
     stop(
@@ -181,29 +119,362 @@ compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini") {
       call. = FALSE
     )
   }
+}
+
+.normalize_contexts <- function(x) {
+  # retrieved_texts is expected to be a list-column; each row is a character vector.
+  if (is.null(x)) return(character(0L))
+  if (is.character(x)) {
+    # If a single string was stored, treat as one context.
+    return(x)
+  }
+  if (is.list(x)) {
+    # Unlist one level, keep as character
+    y <- unlist(x, use.names = FALSE)
+    return(as.character(y))
+  }
+  as.character(x)
+}
+
+.clamp01 <- function(v) {
+  if (is.na(v)) return(NA_real_)
+  max(0, min(1, as.numeric(v)))
+}
+
+# Strict-ish JSON reader: accepts a single JSON object; returns NULL if invalid.
+.parse_json_object <- function(txt) {
+  if (is.null(txt) || !is.character(txt) || length(txt) != 1L) return(NULL)
+  out <- tryCatch(jsonlite::fromJSON(txt), error = function(e) NULL)
+  if (is.null(out) || !is.list(out)) return(NULL)
+  out
+}
+
+# One JSON-mode judge call, with a single retry if parsing fails.
+.judge_json <- function(
+  prompt,
+  judge_model = "gpt-4o-mini",
+  system_message = NULL,
+  temperature = 0,
+  max_output_tokens = 700L,
+  retry_once = TRUE
+) {
+  if (is.null(system_message)) {
+    system_message <- paste(
+      "You are a strict evaluator for RAG metrics.",
+      "You MUST output a SINGLE valid JSON object and nothing else.",
+      "Do not wrap JSON in markdown fences."
+    )
+  }
+
+  raw <- generate_openai_chat(
+    prompt = prompt,
+    model = judge_model,
+    system_message = system_message,
+    temperature = temperature,
+    max_output_tokens = max_output_tokens,
+    response_format = list(type = "json_object")
+  )
+
+  parsed <- .parse_json_object(raw)
+  if (!is.null(parsed)) return(parsed)
+
+  if (!isTRUE(retry_once)) return(NULL)
+
+  # Retry with an even stricter reminder.
+  raw2 <- generate_openai_chat(
+    prompt = paste0(
+      prompt,
+      "\n\nIMPORTANT: Output ONLY ONE valid JSON object. No prose, no explanations."
+    ),
+    model = judge_model,
+    system_message = system_message,
+    temperature = temperature,
+    max_output_tokens = max_output_tokens,
+    response_format = list(type = "json_object")
+  )
+  .parse_json_object(raw2)
+}
+
+# ---- Metric: Answer Relevance (0-1) -----------------------------------------
+
+.score_answer_relevance <- function(question, answer, judge_model, temperature) {
+  prompt <- paste0(
+    "Task: Score ANSWER RELEVANCE in [0,1].\n",
+    "Definition:\n",
+    "- 1.0: The answer directly addresses the question, is on-topic, and attempts to fully answer what is asked.\n",
+    "- 0.5: Partially addresses the question but misses key parts, is vague, or contains significant irrelevant content.\n",
+    "- 0.0: Does not answer the question, is unrelated, or says it cannot answer without attempting when it actually could.\n",
+    "Rules:\n",
+    "- Judge relevance only (not factual correctness).\n",
+    "- If the answer is empty or only filler, score 0.\n\n",
+    "Return JSON: {\"score\": <number>}.\n\n",
+    "Question:\n", question, "\n\n",
+    "Answer:\n", answer, "\n"
+  )
+
+  out <- .judge_json(
+    prompt = prompt,
+    judge_model = judge_model,
+    temperature = temperature,
+    max_output_tokens = 300L
+  )
+  if (is.null(out) || is.null(out$score)) return(NA_real_)
+  .clamp01(out$score)
+}
+
+# ---- Metric: Context Precision (chunk relevance; mean of relevant chunks) ----
+
+.score_context_precision <- function(question, contexts, judge_model, temperature) {
+  if (length(contexts) == 0L) return(0)
+
+  # One call returns an array of 0/1 relevances.
+  ctx_block <- paste0(
+    vapply(seq_along(contexts), function(i) {
+      paste0(i, ". ", contexts[[i]])
+    }, character(1)),
+    collapse = "\n\n"
+  )
+
+  prompt <- paste0(
+    "Task: Score CONTEXT PRECISION.\n",
+    "Definition:\n",
+    "- A context chunk is RELEVANT if it contains information that helps answer the question.\n",
+    "- Irrelevant chunks are off-topic, purely administrative, or do not help answer the question.\n",
+    "Procedure:\n",
+    "- For each chunk, output 1 if relevant, else 0.\n",
+    "- Then compute precision = mean(relevance).\n\n",
+    "Return JSON: {\"relevance\": [0/1,...], \"score\": <precision in [0,1]>}.\n\n",
+    "Question:\n", question, "\n\n",
+    "Contexts:\n", ctx_block, "\n"
+  )
+
+  out <- .judge_json(
+    prompt = prompt,
+    judge_model = judge_model,
+    temperature = temperature,
+    max_output_tokens = 800L
+  )
+
+  if (is.null(out) || is.null(out$score)) return(NA_real_)
+  .clamp01(out$score)
+}
+
+# ---- Metric: Faithfulness (claim support; supported/total) ------------------
+
+.extract_claims <- function(answer, judge_model, temperature) {
+  prompt <- paste0(
+    "Task: Extract ATOMIC FACTUAL CLAIMS from the answer.\n",
+    "Rules:\n",
+    "- A claim should be a single checkable statement.\n",
+    "- Ignore purely stylistic or conversational text.\n",
+    "- If there are no factual claims, return an empty list.\n\n",
+    "Return JSON: {\"claims\": [\"...\"]}.\n\n",
+    "Answer:\n", answer, "\n"
+  )
+
+  out <- .judge_json(
+    prompt = prompt,
+    judge_model = judge_model,
+    temperature = temperature,
+    max_output_tokens = 700L
+  )
+
+  if (is.null(out) || is.null(out$claims)) return(character(0L))
+  claims <- out$claims
+  if (is.null(claims)) return(character(0L))
+  if (!is.character(claims)) claims <- as.character(unlist(claims, use.names = FALSE))
+  claims <- claims[nzchar(trimws(claims))]
+  unique(claims)
+}
+
+.check_claim_support <- function(claims, contexts, judge_model, temperature) {
+  if (length(claims) == 0L) {
+    return(list(supported = logical(0), score = 1))
+  }
+  ctx_block <- paste0(
+    vapply(seq_along(contexts), function(i) {
+      paste0(i, ". ", contexts[[i]])
+    }, character(1)),
+    collapse = "\n\n"
+  )
+  claims_block <- paste0(
+    vapply(seq_along(claims), function(i) {
+      paste0(i, ". ", claims[[i]])
+    }, character(1)),
+    collapse = "\n"
+  )
+
+  prompt <- paste0(
+    "Task: Check FAITHFULNESS (support in retrieved contexts).\n",
+    "Definition:\n",
+    "- A claim is SUPPORTED if the retrieved contexts explicitly contain the information needed for that claim.\n",
+    "- If the contexts do not support it, mark unsupported.\n",
+    "Rules:\n",
+    "- Be strict: if support is missing or only implied, mark unsupported.\n",
+    "- Use ONLY the contexts.\n\n",
+    "Return JSON: {\"supported\": [true/false,...], \"score\": <supported_fraction in [0,1]>}.\n\n",
+    "Claims:\n", claims_block, "\n\n",
+    "Contexts:\n", ctx_block, "\n"
+  )
+
+  out <- .judge_json(
+    prompt = prompt,
+    judge_model = judge_model,
+    temperature = temperature,
+    max_output_tokens = 900L
+  )
+
+  if (is.null(out) || is.null(out$score)) return(list(supported = rep(NA, length(claims)), score = NA_real_))
+  list(supported = out$supported, score = .clamp01(out$score))
+}
+
+.score_faithfulness <- function(answer, contexts, judge_model, temperature) {
+  if (!nzchar(trimws(answer))) return(0)
+  if (length(contexts) == 0L) return(0)
+
+  claims <- .extract_claims(answer, judge_model, temperature)
+  checked <- .check_claim_support(claims, contexts, judge_model, temperature)
+  checked$score
+}
+
+# ---- Metric: Context Recall (ground-truth keypoints covered by contexts) ----
+
+.extract_keypoints <- function(question, ground_truth, judge_model, temperature) {
+  prompt <- paste0(
+    "Task: Extract KEYPOINTS from the ground-truth answer that are needed to answer the question.\n",
+    "Rules:\n",
+    "- Each keypoint should be a short, checkable statement.\n",
+    "- Aim for 3-8 keypoints when possible.\n",
+    "- Do not invent info; only use ground truth.\n\n",
+    "Return JSON: {\"keypoints\": [\"...\"]}.\n\n",
+    "Question:\n", question, "\n\n",
+    "Ground truth answer:\n", ground_truth, "\n"
+  )
+
+  out <- .judge_json(
+    prompt = prompt,
+    judge_model = judge_model,
+    temperature = temperature,
+    max_output_tokens = 700L
+  )
+
+  if (is.null(out) || is.null(out$keypoints)) return(character(0L))
+  kps <- out$keypoints
+  if (!is.character(kps)) kps <- as.character(unlist(kps, use.names = FALSE))
+  kps <- kps[nzchar(trimws(kps))]
+  unique(kps)
+}
+
+.check_keypoint_coverage <- function(keypoints, contexts, judge_model, temperature) {
+  if (length(keypoints) == 0L) {
+    return(list(covered = logical(0), score = 1))
+  }
+  ctx_block <- paste0(
+    vapply(seq_along(contexts), function(i) {
+      paste0(i, ". ", contexts[[i]])
+    }, character(1)),
+    collapse = "\n\n"
+  )
+  kp_block <- paste0(
+    vapply(seq_along(keypoints), function(i) {
+      paste0(i, ". ", keypoints[[i]])
+    }, character(1)),
+    collapse = "\n"
+  )
+
+  prompt <- paste0(
+    "Task: Check CONTEXT RECALL (coverage of ground-truth keypoints by retrieved contexts).\n",
+    "Definition:\n",
+    "- A keypoint is COVERED if the retrieved contexts contain enough information to support it.\n",
+    "Rules:\n",
+    "- Be strict: if not clearly present, mark not covered.\n",
+    "- Use ONLY the contexts.\n\n",
+    "Return JSON: {\"covered\": [true/false,...], \"score\": <covered_fraction in [0,1]>}.\n\n",
+    "Keypoints:\n", kp_block, "\n\n",
+    "Contexts:\n", ctx_block, "\n"
+  )
+
+  out <- .judge_json(
+    prompt = prompt,
+    judge_model = judge_model,
+    temperature = temperature,
+    max_output_tokens = 900L
+  )
+
+  if (is.null(out) || is.null(out$score)) return(list(covered = rep(NA, length(keypoints)), score = NA_real_))
+  list(covered = out$covered, score = .clamp01(out$score))
+}
+
+.score_context_recall <- function(question, ground_truth, contexts, judge_model, temperature) {
+  if (!nzchar(trimws(ground_truth))) return(NA_real_)
+  if (length(contexts) == 0L) return(0)
+
+  kps <- .extract_keypoints(question, ground_truth, judge_model, temperature)
+  checked <- .check_keypoint_coverage(kps, contexts, judge_model, temperature)
+  checked$score
+}
+
+#' Compute RAGAS-style metrics (LLM scored, rubric-defined)
+#'
+#' Implements RAGAS-style metrics using an LLM judge with explicit rubrics:
+#' - Context Precision: fraction of retrieved chunks relevant to the question.
+#' - Context Recall: fraction of ground-truth keypoints covered by retrieved contexts.
+#' - Answer Relevance: relevance of answer to question (not correctness).
+#' - Faithfulness: fraction of answer claims supported by retrieved contexts.
+#'
+#' IMPORTANT:
+#' - `context_recall` REQUIRES `answer_reference` (ground truth). If missing/NA,
+#'   context_recall is returned as NA_real_ for that row.
+#'
+#' Requires an OpenAI API key via `OPENAI_API_KEY`.
+#'
+#' @param qa_log A tibble created and populated by [log_rag_interaction()].
+#' @param judge_model Character scalar; judge model name (default: "gpt-4o-mini").
+#' @param judge_temperature Numeric; default 0 for deterministic scoring.
+#'
+#' @return A tibble with one row per `qa_id` and metric columns.
+#' @export
+compute_ragas_metrics_llm <- function(
+  qa_log,
+  judge_model = "gpt-4o-mini",
+  judge_temperature = 0
+) {
+  if (is.null(qa_log) || nrow(qa_log) == 0L) {
+    return(qa_metrics_empty())
+  }
+
+  .assert_required_cols(qa_log, c("qa_id", "question", "answer_model", "retrieved_texts"))
 
   has_gt <- "answer_reference" %in% names(qa_log)
 
   rows <- lapply(seq_len(nrow(qa_log)), function(i) {
-    qa_id  <- qa_log$qa_id[i]
-    q      <- qa_log$question[i]
-    a      <- qa_log$answer_model[i]
-    ctx    <- unlist(qa_log$retrieved_texts[[i]])
-    if (length(ctx) == 0L) ctx <- ""
+    qa_id <- qa_log$qa_id[i]
+    q     <- qa_log$question[i]
+    a     <- qa_log$answer_model[i]
+
+    ctx <- .normalize_contexts(qa_log$retrieved_texts[[i]])
+    ctx <- ctx[nzchar(trimws(ctx))]
 
     gt <- NULL
-    if (has_gt) {
+    if (isTRUE(has_gt)) {
       gt_val <- qa_log$answer_reference[i]
-      if (!is.na(gt_val) && nzchar(gt_val)) gt <- gt_val
+      if (!is.na(gt_val) && nzchar(trimws(gt_val))) gt <- as.character(gt_val)
     }
 
-    cp <- score_metric_llm("context_precision", q, a, ctx, ground_truth = gt, model = judge_model)
-    cr <- score_metric_llm("context_recall",    q, a, ctx, ground_truth = gt, model = judge_model)
-    ar <- score_metric_llm("answer_relevance",  q, a, ctx, ground_truth = gt, model = judge_model)
-    fa <- score_metric_llm("faithfulness",      q, a, ctx, ground_truth = gt, model = judge_model)
+    cp <- .score_context_precision(q, ctx, judge_model, judge_temperature)
+    ar <- .score_answer_relevance(q, a, judge_model, judge_temperature)
+    fa <- .score_faithfulness(a, ctx, judge_model, judge_temperature)
 
-    overall <- mean(c(cp, cr, ar, fa), na.rm = TRUE)
-    if (is.nan(overall)) overall <- NA_real_
+    cr <- NA_real_
+    if (!is.null(gt)) {
+      cr <- .score_context_recall(q, gt, ctx, judge_model, judge_temperature)
+    }
+
+    # Overall: only defined when all four metrics are available (canonical run).
+    overall <- NA_real_
+    if (!any(is.na(c(cp, cr, ar, fa)))) {
+      overall <- mean(c(cp, cr, ar, fa))
+    }
 
     tibble::tibble(
       qa_id             = as.integer(qa_id),
@@ -223,16 +494,22 @@ compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini") {
 #' Compute RAGAS metrics (mode switch)
 #'
 #' Convenience wrapper to compute either approximate proxy metrics or
-#' LLM-scored metrics.
+#' LLM-scored rubric-defined metrics.
 #'
 #' @param qa_log QA log tibble.
 #' @param mode One of `"approx"` or `"llm"`. If NULL, uses option
 #'   `ragR.ragas_mode` (defaults to `"approx"`).
 #' @param judge_model Judge model for `mode="llm"` (default: "gpt-4o-mini").
+#' @param judge_temperature Judge temperature for `mode="llm"` (default: 0).
 #'
 #' @return A metrics tibble.
 #' @export
-compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-mini") {
+compute_ragas_metrics <- function(
+  qa_log,
+  mode = NULL,
+  judge_model = "gpt-4o-mini",
+  judge_temperature = 0
+) {
   if (is.null(mode)) {
     mode <- getOption("ragR.ragas_mode", "approx")
   }
@@ -241,6 +518,10 @@ compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-min
   if (identical(mode, "approx")) {
     compute_ragas_metrics_approx(qa_log)
   } else {
-    compute_ragas_metrics_llm(qa_log, judge_model = judge_model)
+    compute_ragas_metrics_llm(
+      qa_log,
+      judge_model = judge_model,
+      judge_temperature = judge_temperature
+    )
   }
 }

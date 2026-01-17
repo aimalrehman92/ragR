@@ -10,7 +10,7 @@
 #' - `"sentence"`: strict sentence splitting via `chunk_text_sentence()`.
 #'
 #' Cleaning strategy (minimal, deterministic):
-#' - Replace \r and \n line breaks with spaces
+#' - Replace \verb{\\r} and \verb{\\n}line breaks with spaces
 #' - Collapse multiple whitespace to a single space
 #' - Trim leading/trailing whitespace
 #'
@@ -153,7 +153,7 @@ ingest_documents <- function(
 
 #' Clean raw extracted text (minimal)
 #'
-#' - Replaces \r and \n with spaces
+#' - Replaces \verb{\\r} and \verb{\\n} with spaces
 #' - Collapses multiple whitespace
 #' - Trims
 #'

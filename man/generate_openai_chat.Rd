@@ -10,6 +10,7 @@ generate_openai_chat(
   system_message = NULL,
   temperature = 0,
   max_output_tokens = 512L,
+  response_format = NULL,
   api_key = NULL
 )
 }
@@ -23,6 +24,9 @@ generate_openai_chat(
 \item{temperature}{Numeric; sampling temperature (0 = deterministic).}
 
 \item{max_output_tokens}{Integer; maximum tokens to generate. Sent as \code{max_tokens}.}
+
+\item{response_format}{Optional list; passed to the API as \code{response_format} to
+enable JSON mode / structured outputs. For JSON mode use list(type="json_object").}
 
 \item{api_key}{OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.}
 }
