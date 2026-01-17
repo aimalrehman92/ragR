@@ -53,6 +53,28 @@ if (nrow(qa_log) == 0L) {
   stop("qa_log is empty. Collect Q/A interactions first.", call. = FALSE)
 }
 
+# Enforce ground truth presence when running canonical LLM metrics
+if (USE_LLM_METRICS) {
+  if (!("answer_reference" %in% names(qa_log))) {
+    stop("QA log is missing 'answer_reference'. Populate ground truth before running LLM RAGAS.", call. = FALSE)
+  }
+
+  gt <- qa_log$answer_reference
+  gt_missing <- is.na(gt) | !nzchar(trimws(as.character(gt)))
+
+  if (any(gt_missing)) {
+    bad_ids <- qa_log$qa_id[gt_missing]
+    stop(
+      sprintf(
+        "Ground truth missing/empty for %d row(s). Example qa_id: %s. Populate answer_reference before running canonical RAGAS.",
+        sum(gt_missing),
+        paste(utils::head(bad_ids, 10), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+}
+
 # 2) Compute metrics
 cat("Computing metrics...\n")
 
