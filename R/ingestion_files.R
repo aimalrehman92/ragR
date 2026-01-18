@@ -110,12 +110,12 @@ ingest_documents <- function(
     # Robust to naming differences, so ingest won't break if you renamed the helper elsewhere.
     if (exists("get_openai_embeddings", mode = "function")) {
       embeddings <- get_openai_embeddings(texts = chunks_df$text, model = embedding_model)
-    } else if (exists("get_openai_embeddings_openai", mode = "function")) {
-      embeddings <- get_openai_embeddings_openai(texts = chunks_df$text, model = embedding_model)
+    } else if (exists("get_openai_embeddings", mode = "function")) {
+      embeddings <- get_openai_embeddings(texts = chunks_df$text, model = embedding_model)
     } else {
       stop(
         "OpenAI embedding helper not found. Expected `get_openai_embeddings()` ",
-        "or `get_openai_embeddings_openai()` to exist in the package.",
+        "or `get_openai_embeddings()` to exist in the package.",
         call. = FALSE
       )
     }

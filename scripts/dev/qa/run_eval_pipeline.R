@@ -121,7 +121,7 @@ cat("\nDone.\n")
 
 invisible(list(
   mode       = if (USE_LLM_METRICS) "llm" else "approx",
-  seed       = if (USE_LLM_METRRICS) SEED else NULL,
+  seed       = if (USE_LLM_METRICS) SEED else NULL,
   qa_log     = qa_log,
   qa_metrics = qa_metrics,
   summary    = summary_tbl,

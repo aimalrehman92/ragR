@@ -8,7 +8,7 @@ compute_ragas_metrics(
   qa_log,
   mode = NULL,
   judge_model = "gpt-4o-mini",
-  answer_relevance_strictness = 3L
+  seed = NULL
 )
 }
 \arguments{
@@ -19,7 +19,7 @@ compute_ragas_metrics(
 
 \item{judge_model}{Judge model for \code{mode="llm"} (default: "gpt-4o-mini").}
 
-\item{answer_relevance_strictness}{Integer; number of questions to generate per answer (default: 3).}
+\item{seed}{Optional integer. Forwarded to LLM-scored metrics when \code{mode="llm"}.}
 }
 \value{
 A metrics tibble.

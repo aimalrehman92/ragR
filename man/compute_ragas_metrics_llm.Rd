@@ -4,18 +4,16 @@
 \alias{compute_ragas_metrics_llm}
 \title{Compute RAGAS-style metrics (LLM scored)}
 \usage{
-compute_ragas_metrics_llm(
-  qa_log,
-  judge_model = "gpt-4o-mini",
-  answer_relevance_strictness = 3L
-)
+compute_ragas_metrics_llm(qa_log, judge_model = "gpt-4o-mini", seed = NULL)
 }
 \arguments{
 \item{qa_log}{A tibble created and populated by \code{\link[=log_rag_interaction]{log_rag_interaction()}}.}
 
 \item{judge_model}{Character scalar; judge model name (default: "gpt-4o-mini").}
 
-\item{answer_relevance_strictness}{Integer; number of questions to generate per answer (default: 3).}
+\item{seed}{Optional integer. If provided (and supported by the underlying
+model/provider), it is forwarded to the judge model calls to encourage
+reproducible scores (typically together with \code{temperature = 0}).}
 }
 \value{
 A tibble with one row per \code{qa_id} and metric columns.
@@ -28,15 +26,6 @@ each metric in \eqn{[0,1]} from the QA log’s question/answer/retrieved context
 Notes:
 \itemize{
 \item If \code{answer_reference} exists and is non-NA, it may be used as ground truth.
-\item \code{context_precision} is implemented to mirror RAGAS (Python) behavior:
-it computes \strong{Average Precision} over per-context binary usefulness verdicts.
-\item \code{context_recall} is implemented to mirror RAGAS (Python) behavior:
-it computes the fraction of sentences in the \strong{reference answer} that can be attributed to the retrieved context.
-\item \code{answer_relevance} is implemented to mirror RAGAS (Python) behavior:
-it generates multiple questions from the answer and scores cosine similarity to the original question,
-penalizing noncommittal answers.
-\item \code{faithfulness} is implemented to mirror RAGAS (Python) behavior:
-it decomposes the answer into pronoun-free statements, then does NLI-style inference checks against contexts.
 \item Requires an OpenAI API key via \code{OPENAI_API_KEY}.
 }
 }
