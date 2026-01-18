@@ -149,6 +149,22 @@ compute_ragas_metrics_approx <- function(qa_log) {
   ifelse(v == 1L, 1L, 0L)
 }
 
+# Internal: parse attributed (0/1) from model response
+.parse_attributed_01 <- function(x) {
+  if (is.null(x) || !is.character(x) || length(x) != 1L) return(NA_integer_)
+
+  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
+  if (is.list(out) && !is.null(out$attributed)) {
+    v <- suppressWarnings(as.integer(out$attributed))
+    if (!is.na(v)) return(ifelse(v == 1L, 1L, 0L))
+  }
+
+  m <- regmatches(x, regexpr("[0-9]+", x))
+  v <- suppressWarnings(as.integer(m))
+  if (is.na(v)) return(NA_integer_)
+  ifelse(v == 1L, 1L, 0L)
+}
+
 # Internal: compute Average Precision from a ranked binary relevance vector
 # Mirrors RAGAS Python implementation used by context_precision.
 .average_precision <- function(verdicts) {
@@ -166,6 +182,21 @@ compute_ragas_metrics_approx <- function(qa_log) {
   }
   .clamp01(numer / denom)
 }
+
+# Internal: split into sentences (simple + robust for evaluation)
+.split_sentences <- function(x) {
+  if (is.null(x) || is.na(x) || !nzchar(trimws(x))) return(character(0L))
+  x <- gsub("\r\n|\r", "\n", x)
+  x <- gsub("[ \t]+", " ", x)
+  x <- gsub("\n+", "\n", x)
+
+  parts <- unlist(strsplit(x, "(?<=[.!?])\\s+|\\n+", perl = TRUE))
+  parts <- trimws(parts)
+  parts <- parts[nzchar(parts)]
+  parts
+}
+
+# ---- CONTEXT PRECISION (DO NOT CHANGE) --------------------------------------
 
 # Internal: context precision verdict prompt (matches ragas/main prompt intent)
 .score_context_precision_llm <- function(question, answer_for_eval, contexts, model = "gpt-4o-mini") {
@@ -192,6 +223,47 @@ compute_ragas_metrics_approx <- function(qa_log) {
   .average_precision(verdicts)
 }
 
+# ---- CONTEXT RECALL (ALIGN WITH PYTHON) -------------------------------------
+
+# Internal: Context recall classification prompt (sentence-level attribution)
+# Mirrors the Python definition: classify each sentence in the reference answer
+# as attributable (1) or not (0) to the retrieved context; score = mean(attributed).
+.score_context_recall_llm <- function(question, reference_answer, contexts, model = "gpt-4o-mini") {
+  if (is.null(reference_answer) || is.na(reference_answer) || !nzchar(trimws(reference_answer))) {
+    return(NA_real_)
+  }
+
+  ctx_joined <- paste(contexts, collapse = "\n")
+  answer_sents <- .split_sentences(reference_answer)
+
+  if (length(answer_sents) == 0L) {
+    return(NA_real_)
+  }
+
+  attributed_vec <- integer(length(answer_sents))
+
+  for (i in seq_along(answer_sents)) {
+    stmt <- answer_sents[[i]]
+
+    prompt <- paste0(
+      "Given a context, and an answer, analyze each sentence in the answer and classify if the sentence can be attributed to the given context or not. ",
+      "Use only 'Yes' (1) or 'No' (0) as a binary classification. Output json with reason.\n\n",
+      "Question:\n", question, "\n\n",
+      "Context:\n", ctx_joined, "\n\n",
+      "Answer sentence:\n", stmt, "\n\n",
+      "Return ONLY valid JSON: {\"statement\": <string>, \"reason\": <string>, \"attributed\": 0 or 1}."
+    )
+
+    raw <- generate_openai_chat(prompt = prompt, model = model, temperature = 0)
+    v <- .parse_attributed_01(raw)
+    if (is.na(v)) v <- 0L
+    attributed_vec[[i]] <- v
+  }
+
+  score <- sum(attributed_vec) / length(attributed_vec)
+  .clamp01(score)
+}
+
 # Internal: score one metric with OpenAI chat (expects generate_openai_chat in embeddings_openai.R)
 score_metric_llm <- function(metric_name, question, answer, contexts, ground_truth = NULL, model = "gpt-4o-mini") {
   # Special-case: context_precision in RAGAS is Average Precision over per-context 0/1 verdicts.
@@ -202,6 +274,14 @@ score_metric_llm <- function(metric_name, question, answer, contexts, ground_tru
       answer
     }
     return(.score_context_precision_llm(question, answer_for_eval, contexts, model = model))
+  }
+
+  # Special-case: context_recall uses the REFERENCE (ground truth) answer, sentence-level attribution.
+  if (identical(metric_name, "context_recall")) {
+    if (is.null(ground_truth) || !is.character(ground_truth) || length(ground_truth) != 1L || !nzchar(trimws(ground_truth))) {
+      return(NA_real_)
+    }
+    return(.score_context_recall_llm(question, ground_truth, contexts, model = model))
   }
 
   ctx_block <- paste0("- ", contexts, collapse = "\n")
@@ -236,6 +316,8 @@ score_metric_llm <- function(metric_name, question, answer, contexts, ground_tru
 #' - If `answer_reference` exists and is non-NA, it may be used as ground truth.
 #' - `context_precision` is implemented to mirror RAGAS (Python) behavior:
 #'   it computes **Average Precision** over per-context binary usefulness verdicts.
+#' - `context_recall` is implemented to mirror RAGAS (Python) behavior:
+#'   it computes the fraction of sentences in the **reference answer** that can be attributed to the retrieved context.
 #' - Requires an OpenAI API key via `OPENAI_API_KEY`.
 #'
 #' @param qa_log A tibble created and populated by [log_rag_interaction()].
