@@ -1,3 +1,6 @@
+Using the Python `_answer_relevance.py` definition (question-generation + noncommittal gating + embedding cosine similarity). 
+
+```r
 # R/ragas_metrics.R
 
 #' Create an empty QA metrics tibble
@@ -223,7 +226,7 @@ compute_ragas_metrics_approx <- function(qa_log) {
   .average_precision(verdicts)
 }
 
-# ---- CONTEXT RECALL (ALIGN WITH PYTHON) -------------------------------------
+# ---- CONTEXT RECALL (DO NOT CHANGE) -----------------------------------------
 
 # Internal: Context recall classification prompt (sentence-level attribution)
 # Mirrors the Python definition: classify each sentence in the reference answer
@@ -264,8 +267,109 @@ compute_ragas_metrics_approx <- function(qa_log) {
   .clamp01(score)
 }
 
+# ---- ANSWER RELEVANCE (ALIGN WITH PYTHON) ------------------------------------
+
+# Internal: parse {question, noncommittal} from model response
+.parse_answer_relevance_gen <- function(x) {
+  # Defaults match Python behavior: if unusable, treat as invalid and noncommittal.
+  res <- list(question = "", noncommittal = 1L)
+
+  if (is.null(x) || !is.character(x) || length(x) != 1L) return(res)
+
+  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
+  if (!is.list(out)) return(res)
+
+  if (!is.null(out$question) && is.character(out$question) && length(out$question) == 1L) {
+    res$question <- as.character(out$question)
+  }
+  if (!is.null(out$noncommittal)) {
+    nc <- suppressWarnings(as.integer(out$noncommittal))
+    if (!is.na(nc)) res$noncommittal <- ifelse(nc == 1L, 1L, 0L)
+  }
+
+  res
+}
+
+# Internal: cosine similarity between one vector and a matrix of vectors
+.cosine_sim_many <- function(query_vec, doc_mat) {
+  # query_vec: numeric vector length d
+  # doc_mat: numeric matrix n x d
+  q <- as.numeric(query_vec)
+  D <- as.matrix(doc_mat)
+
+  qn <- sqrt(sum(q * q))
+  dn <- sqrt(rowSums(D * D))
+  denom <- (dn * qn)
+
+  # Avoid division by zero
+  denom[denom == 0] <- NA_real_
+
+  sims <- as.numeric((D %*% q) / denom)
+  sims
+}
+
+# Internal: Answer relevance per RAGAS Python:
+# - generate N questions from answer + noncommittal flag
+# - score = mean cosine similarity(original_question, generated_questions) * (not all_noncommittal)
+.score_answer_relevance_llm <- function(
+  question,
+  answer,
+  model = "gpt-4o-mini",
+  strictness = 3L,
+  embedding_model = "text-embedding-3-small"
+) {
+  strictness <- as.integer(strictness)
+  if (is.na(strictness) || strictness <= 0L) strictness <- 3L
+
+  # Same instruction intent as Python (with examples baked in Python; here we keep it short but strict)
+  base_prompt <- paste0(
+    "Generate a question for the given answer and identify if the answer is noncommittal. ",
+    "Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. ",
+    "A noncommittal answer is evasive, vague, or ambiguous (e.g., \"I don't know\", \"I'm not sure\").\n\n",
+    "Answer:\n", answer, "\n\n",
+    "Return ONLY valid JSON: {\"question\": <string>, \"noncommittal\": 0 or 1}."
+  )
+
+  gens <- vector("list", strictness)
+  for (i in seq_len(strictness)) {
+    raw <- generate_openai_chat(prompt = base_prompt, model = model, temperature = 0)
+    gens[[i]] <- .parse_answer_relevance_gen(raw)
+  }
+
+  gen_questions <- vapply(gens, function(z) z$question %||% "", character(1))
+  noncommittal_flags <- vapply(gens, function(z) as.integer(z$noncommittal %||% 1L), integer(1))
+
+  # Python: if all generated questions are empty -> NaN
+  if (all(trimws(gen_questions) == "")) {
+    return(NA_real_)
+  }
+
+  # Python: all_noncommittal -> score becomes 0 (multiplied by int(not all_noncommittal))
+  all_noncommittal <- all(noncommittal_flags == 1L)
+
+  # Embeddings cosine similarity
+  q_vec <- get_openai_embeddings(c(question), model = embedding_model)
+  g_mat <- get_openai_embeddings(as.character(gen_questions), model = embedding_model)
+
+  sims <- .cosine_sim_many(q_vec[1, ], g_mat)
+  score <- mean(sims, na.rm = TRUE) * as.numeric(!all_noncommittal)
+
+  .clamp01(score)
+}
+
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
 # Internal: score one metric with OpenAI chat (expects generate_openai_chat in embeddings_openai.R)
-score_metric_llm <- function(metric_name, question, answer, contexts, ground_truth = NULL, model = "gpt-4o-mini") {
+score_metric_llm <- function(
+  metric_name,
+  question,
+  answer,
+  contexts,
+  ground_truth = NULL,
+  model = "gpt-4o-mini",
+  embedding_model = NULL,
+  answer_relevance_strictness = 3L
+) {
   # Special-case: context_precision in RAGAS is Average Precision over per-context 0/1 verdicts.
   if (identical(metric_name, "context_precision")) {
     answer_for_eval <- if (!is.null(ground_truth) && is.character(ground_truth) && length(ground_truth) == 1L && nzchar(trimws(ground_truth))) {
@@ -282,6 +386,20 @@ score_metric_llm <- function(metric_name, question, answer, contexts, ground_tru
       return(NA_real_)
     }
     return(.score_context_recall_llm(question, ground_truth, contexts, model = model))
+  }
+
+  # Special-case: answer_relevance mirrors RAGAS Python (AnswerRelevancy / ResponseRelevancy)
+  if (identical(metric_name, "answer_relevance")) {
+    if (is.null(embedding_model) || !is.character(embedding_model) || length(embedding_model) != 1L || !nzchar(embedding_model)) {
+      embedding_model <- "text-embedding-3-small"
+    }
+    return(.score_answer_relevance_llm(
+      question = question,
+      answer = answer,
+      model = model,
+      strictness = answer_relevance_strictness,
+      embedding_model = embedding_model
+    ))
   }
 
   ctx_block <- paste0("- ", contexts, collapse = "\n")
@@ -318,14 +436,18 @@ score_metric_llm <- function(metric_name, question, answer, contexts, ground_tru
 #'   it computes **Average Precision** over per-context binary usefulness verdicts.
 #' - `context_recall` is implemented to mirror RAGAS (Python) behavior:
 #'   it computes the fraction of sentences in the **reference answer** that can be attributed to the retrieved context.
+#' - `answer_relevance` is implemented to mirror RAGAS (Python) behavior:
+#'   it generates multiple questions from the answer and scores cosine similarity to the original question,
+#'   penalizing noncommittal answers.
 #' - Requires an OpenAI API key via `OPENAI_API_KEY`.
 #'
 #' @param qa_log A tibble created and populated by [log_rag_interaction()].
 #' @param judge_model Character scalar; judge model name (default: "gpt-4o-mini").
+#' @param answer_relevance_strictness Integer; number of questions to generate per answer (default: 3).
 #'
 #' @return A tibble with one row per `qa_id` and metric columns.
 #' @export
-compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini") {
+compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini", answer_relevance_strictness = 3L) {
   if (is.null(qa_log) || nrow(qa_log) == 0L) {
     return(qa_metrics_empty())
   }
@@ -341,6 +463,7 @@ compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini") {
   }
 
   has_gt <- "answer_reference" %in% names(qa_log)
+  has_emb_model <- "embedding_model" %in% names(qa_log)
 
   rows <- lapply(seq_len(nrow(qa_log)), function(i) {
     qa_id  <- qa_log$qa_id[i]
@@ -358,9 +481,19 @@ compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini") {
       if (!is.na(gt_val) && nzchar(trimws(gt_val))) gt <- as.character(gt_val)
     }
 
+    emb_model <- if (isTRUE(has_emb_model)) as.character(qa_log$embedding_model[i]) else "text-embedding-3-small"
+    if (is.na(emb_model) || !nzchar(emb_model)) emb_model <- "text-embedding-3-small"
+
     cp <- score_metric_llm("context_precision", q, a, ctx, ground_truth = gt, model = judge_model)
     cr <- score_metric_llm("context_recall",    q, a, ctx, ground_truth = gt, model = judge_model)
-    ar <- score_metric_llm("answer_relevance",  q, a, ctx, ground_truth = gt, model = judge_model)
+    ar <- score_metric_llm(
+      "answer_relevance",
+      q, a, ctx,
+      ground_truth = gt,
+      model = judge_model,
+      embedding_model = emb_model,
+      answer_relevance_strictness = answer_relevance_strictness
+    )
     fa <- score_metric_llm("faithfulness",      q, a, ctx, ground_truth = gt, model = judge_model)
 
     overall <- mean(c(cp, cr, ar, fa), na.rm = TRUE)
@@ -390,10 +523,11 @@ compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini") {
 #' @param mode One of `"approx"` or `"llm"`. If NULL, uses option
 #'   `ragR.ragas_mode` (defaults to `"approx"`).
 #' @param judge_model Judge model for `mode="llm"` (default: "gpt-4o-mini").
+#' @param answer_relevance_strictness Integer; number of questions to generate per answer (default: 3).
 #'
 #' @return A metrics tibble.
 #' @export
-compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-mini") {
+compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-mini", answer_relevance_strictness = 3L) {
   if (is.null(mode)) {
     mode <- getOption("ragR.ragas_mode", "approx")
   }
@@ -402,6 +536,7 @@ compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-min
   if (identical(mode, "approx")) {
     compute_ragas_metrics_approx(qa_log)
   } else {
-    compute_ragas_metrics_llm(qa_log, judge_model = judge_model)
+    compute_ragas_metrics_llm(qa_log, judge_model = judge_model, answer_relevance_strictness = answer_relevance_strictness)
   }
 }
+```
