@@ -1,6 +1,3 @@
-Using the Python `_answer_relevance.py` definition (question-generation + noncommittal gating + embedding cosine similarity). 
-
-```r
 # R/ragas_metrics.R
 
 #' Create an empty QA metrics tibble
@@ -539,4 +536,3 @@ compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-min
     compute_ragas_metrics_llm(qa_log, judge_model = judge_model, answer_relevance_strictness = answer_relevance_strictness)
   }
 }
-```
