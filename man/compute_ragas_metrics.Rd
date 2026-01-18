@@ -4,12 +4,7 @@
 \alias{compute_ragas_metrics}
 \title{Compute RAGAS metrics (mode switch)}
 \usage{
-compute_ragas_metrics(
-  qa_log,
-  mode = NULL,
-  judge_model = "gpt-4o-mini",
-  judge_temperature = 0
-)
+compute_ragas_metrics(qa_log, mode = NULL, judge_model = "gpt-4o-mini")
 }
 \arguments{
 \item{qa_log}{QA log tibble.}
@@ -18,13 +13,11 @@ compute_ragas_metrics(
 \code{ragR.ragas_mode} (defaults to \code{"approx"}).}
 
 \item{judge_model}{Judge model for \code{mode="llm"} (default: "gpt-4o-mini").}
-
-\item{judge_temperature}{Judge temperature for \code{mode="llm"} (default: 0).}
 }
 \value{
 A metrics tibble.
 }
 \description{
 Convenience wrapper to compute either approximate proxy metrics or
-LLM-scored rubric-defined metrics.
+LLM-scored metrics.
 }
