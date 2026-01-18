@@ -289,16 +289,12 @@ compute_ragas_metrics_approx <- function(qa_log) {
 
 # Internal: cosine similarity between one vector and a matrix of vectors
 .cosine_sim_many <- function(query_vec, doc_mat) {
-  # query_vec: numeric vector length d
-  # doc_mat: numeric matrix n x d
   q <- as.numeric(query_vec)
   D <- as.matrix(doc_mat)
 
   qn <- sqrt(sum(q * q))
   dn <- sqrt(rowSums(D * D))
   denom <- (dn * qn)
-
-  # Avoid division by zero
   denom[denom == 0] <- NA_real_
 
   sims <- as.numeric((D %*% q) / denom)
@@ -318,7 +314,6 @@ compute_ragas_metrics_approx <- function(qa_log) {
   strictness <- as.integer(strictness)
   if (is.na(strictness) || strictness <= 0L) strictness <- 3L
 
-  # Same instruction intent as Python (with examples baked in Python; here we keep it short but strict)
   base_prompt <- paste0(
     "Generate a question for the given answer and identify if the answer is noncommittal. ",
     "Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. ",
@@ -336,15 +331,12 @@ compute_ragas_metrics_approx <- function(qa_log) {
   gen_questions <- vapply(gens, function(z) z$question %||% "", character(1))
   noncommittal_flags <- vapply(gens, function(z) as.integer(z$noncommittal %||% 1L), integer(1))
 
-  # Python: if all generated questions are empty -> NaN
   if (all(trimws(gen_questions) == "")) {
     return(NA_real_)
   }
 
-  # Python: all_noncommittal -> score becomes 0 (multiplied by int(not all_noncommittal))
   all_noncommittal <- all(noncommittal_flags == 1L)
 
-  # Embeddings cosine similarity
   q_vec <- get_openai_embeddings(c(question), model = embedding_model)
   g_mat <- get_openai_embeddings(as.character(gen_questions), model = embedding_model)
 
@@ -355,6 +347,99 @@ compute_ragas_metrics_approx <- function(qa_log) {
 }
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
+
+# ---- FAITHFULNESS (ALIGN WITH PYTHON) ----------------------------------------
+
+# Internal: parse {"statements":[...]} from statement generator response
+.parse_faithfulness_statements <- function(x) {
+  if (is.null(x) || !is.character(x) || length(x) != 1L) return(character(0L))
+  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
+  if (!is.list(out) || is.null(out$statements)) return(character(0L))
+  st <- out$statements
+  if (is.null(st)) return(character(0L))
+  st <- as.character(st)
+  st <- st[nzchar(trimws(st))]
+  st
+}
+
+# Internal: parse {"statements":[{"statement":..,"reason":..,"verdict":0/1}, ...]}
+.parse_faithfulness_verdicts <- function(x) {
+  if (is.null(x) || !is.character(x) || length(x) != 1L) return(integer(0L))
+  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
+  if (!is.list(out) || is.null(out$statements)) return(integer(0L))
+
+  st <- out$statements
+  # jsonlite may simplify to data.frame
+  if (is.data.frame(st)) {
+    if (!("verdict" %in% names(st))) return(integer(0L))
+    v <- suppressWarnings(as.integer(st$verdict))
+    v[is.na(v)] <- 0L
+    return(ifelse(v == 1L, 1L, 0L))
+  }
+
+  if (is.list(st)) {
+    v <- vapply(st, function(item) {
+      if (is.list(item) && !is.null(item$verdict)) {
+        vv <- suppressWarnings(as.integer(item$verdict))
+        if (!is.na(vv) && vv == 1L) return(1L)
+        return(0L)
+      }
+      0L
+    }, integer(1))
+    return(v)
+  }
+
+  integer(0L)
+}
+
+# Internal: Faithfulness per RAGAS Python:
+# 1) generate pronoun-free statements from answer using (question, answer)
+# 2) NLI judge each statement against joined retrieved contexts
+# 3) score = (#verdict==1) / (#statements), NaN if no statements
+.score_faithfulness_llm <- function(question, answer, contexts, model = "gpt-4o-mini") {
+  contexts_str <- paste(contexts, collapse = "\n")
+
+  # Statement generation (single call)
+  gen_prompt <- paste0(
+    "Given a question and an answer, analyze the complexity of each sentence in the answer. ",
+    "Break down each sentence into one or more fully understandable statements. ",
+    "Ensure that no pronouns are used in any statement. Format the outputs in JSON.\n\n",
+    "Question:\n", question, "\n\n",
+    "Answer:\n", answer, "\n\n",
+    "Return ONLY valid JSON: {\"statements\": [<string>, ...]}."
+  )
+
+  gen_raw <- generate_openai_chat(prompt = gen_prompt, model = model, temperature = 0)
+  statements <- .parse_faithfulness_statements(gen_raw)
+
+  if (length(statements) == 0L) {
+    return(NA_real_)
+  }
+
+  # NLI verdicts (single call for all statements, matching Python structure)
+  nli_prompt <- paste0(
+    "Your task is to judge the faithfulness of a series of statements based on a given context. ",
+    "For each statement you must return verdict as 1 if the statement can be directly inferred based on the context or 0 if the statement can not be directly inferred based on the context.\n\n",
+    "Context:\n", contexts_str, "\n\n",
+    "Statements (judge each):\n", jsonlite::toJSON(statements, auto_unbox = TRUE), "\n\n",
+    "Return ONLY valid JSON in this exact shape:\n",
+    "{\"statements\": [\n",
+    "  {\"statement\": <string>, \"reason\": <string>, \"verdict\": 0 or 1},\n",
+    "  ...\n",
+    "]}"
+  )
+
+  nli_raw <- generate_openai_chat(prompt = nli_prompt, model = model, temperature = 0)
+  verdicts <- .parse_faithfulness_verdicts(nli_raw)
+
+  if (length(verdicts) == 0L) {
+    # If parsing failed, be conservative
+    return(NA_real_)
+  }
+
+  score <- sum(verdicts == 1L) / length(verdicts)
+  .clamp01(score)
+}
 
 # Internal: score one metric with OpenAI chat (expects generate_openai_chat in embeddings_openai.R)
 score_metric_llm <- function(
@@ -399,6 +484,11 @@ score_metric_llm <- function(
     ))
   }
 
+  # Special-case: faithfulness mirrors RAGAS Python (statement generation + NLI)
+  if (identical(metric_name, "faithfulness")) {
+    return(.score_faithfulness_llm(question = question, answer = answer, contexts = contexts, model = model))
+  }
+
   ctx_block <- paste0("- ", contexts, collapse = "\n")
   gt_line <- if (!is.null(ground_truth) && is.character(ground_truth) && length(ground_truth) == 1L && nzchar(ground_truth)) {
     paste0("\nGround truth answer:\n", ground_truth, "\n")
@@ -436,6 +526,8 @@ score_metric_llm <- function(
 #' - `answer_relevance` is implemented to mirror RAGAS (Python) behavior:
 #'   it generates multiple questions from the answer and scores cosine similarity to the original question,
 #'   penalizing noncommittal answers.
+#' - `faithfulness` is implemented to mirror RAGAS (Python) behavior:
+#'   it decomposes the answer into pronoun-free statements, then does NLI-style inference checks against contexts.
 #' - Requires an OpenAI API key via `OPENAI_API_KEY`.
 #'
 #' @param qa_log A tibble created and populated by [log_rag_interaction()].
