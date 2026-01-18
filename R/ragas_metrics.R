@@ -110,385 +110,26 @@ compute_ragas_metrics_approx <- function(qa_log) {
 
 # ---- LLM-BASED "ACTUAL" METRICS (SCORING) -----------------------------------
 
-# Internal: clamp to [0,1]
-.clamp01 <- function(x) {
-  x <- suppressWarnings(as.numeric(x))
-  if (is.na(x)) return(NA_real_)
-  max(0, min(1, x))
-}
-
 # Internal: parse numeric score from model response (robust-ish)
-.parse_score_01 <- function(x) {
+parse_score_01 <- function(x) {
   if (is.null(x) || !is.character(x) || length(x) != 1L) return(NA_real_)
-
-  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
+  # try JSON first
+  out <- suppressWarnings({
+    tryCatch(jsonlite::fromJSON(x), error = function(e) NULL)
+  })
   if (is.list(out) && !is.null(out$score)) {
     s <- suppressWarnings(as.numeric(out$score))
-    if (!is.na(s)) return(.clamp01(s))
+    if (!is.na(s)) return(max(0, min(1, s)))
   }
-
+  # fallback: first number in text
   m <- regmatches(x, regexpr("[0-9]*\\.?[0-9]+", x))
   s <- suppressWarnings(as.numeric(m))
   if (is.na(s)) return(NA_real_)
-  .clamp01(s)
-}
-
-# Internal: parse verdict (0/1) from model response
-.parse_verdict_01 <- function(x) {
-  if (is.null(x) || !is.character(x) || length(x) != 1L) return(NA_integer_)
-
-  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
-  if (is.list(out) && !is.null(out$verdict)) {
-    v <- suppressWarnings(as.integer(out$verdict))
-    if (!is.na(v)) return(ifelse(v == 1L, 1L, 0L))
-  }
-
-  m <- regmatches(x, regexpr("[0-9]+", x))
-  v <- suppressWarnings(as.integer(m))
-  if (is.na(v)) return(NA_integer_)
-  ifelse(v == 1L, 1L, 0L)
-}
-
-# Internal: parse attributed (0/1) from model response
-.parse_attributed_01 <- function(x) {
-  if (is.null(x) || !is.character(x) || length(x) != 1L) return(NA_integer_)
-
-  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
-  if (is.list(out) && !is.null(out$attributed)) {
-    v <- suppressWarnings(as.integer(out$attributed))
-    if (!is.na(v)) return(ifelse(v == 1L, 1L, 0L))
-  }
-
-  m <- regmatches(x, regexpr("[0-9]+", x))
-  v <- suppressWarnings(as.integer(m))
-  if (is.na(v)) return(NA_integer_)
-  ifelse(v == 1L, 1L, 0L)
-}
-
-# Internal: compute Average Precision from a ranked binary relevance vector
-# Mirrors RAGAS Python implementation used by context_precision.
-.average_precision <- function(verdicts) {
-  if (length(verdicts) == 0L) return(0)
-  v <- as.integer(verdicts)
-  v[is.na(v)] <- 0L
-  v <- ifelse(v == 1L, 1L, 0L)
-
-  denom <- sum(v) + 1e-10
-  numer <- 0
-  for (i in seq_along(v)) {
-    if (v[[i]] == 1L) {
-      numer <- numer + (sum(v[seq_len(i)]) / i) * v[[i]]
-    }
-  }
-  .clamp01(numer / denom)
-}
-
-# Internal: split into sentences (simple + robust for evaluation)
-.split_sentences <- function(x) {
-  if (is.null(x) || is.na(x) || !nzchar(trimws(x))) return(character(0L))
-  x <- gsub("\r\n|\r", "\n", x)
-  x <- gsub("[ \t]+", " ", x)
-  x <- gsub("\n+", "\n", x)
-
-  parts <- unlist(strsplit(x, "(?<=[.!?])\\s+|\\n+", perl = TRUE))
-  parts <- trimws(parts)
-  parts <- parts[nzchar(parts)]
-  parts
-}
-
-# ---- CONTEXT PRECISION (DO NOT CHANGE) --------------------------------------
-
-# Internal: context precision verdict prompt (matches ragas/main prompt intent)
-.score_context_precision_llm <- function(question, answer_for_eval, contexts, model = "gpt-4o-mini") {
-  if (length(contexts) == 0L) return(0)
-
-  verdicts <- integer(length(contexts))
-
-  for (i in seq_along(contexts)) {
-    prompt <- paste0(
-      "Given question, answer and context verify if the context was useful in arriving at the given answer. ",
-      "Give verdict as \"1\" if useful and \"0\" if not with json output.\n\n",
-      "Question:\n", question, "\n\n",
-      "Context:\n", contexts[[i]], "\n\n",
-      "Answer:\n", answer_for_eval, "\n\n",
-      "Return ONLY valid JSON: {\"reason\": <string>, \"verdict\": 0 or 1}."
-    )
-
-    raw <- generate_openai_chat(prompt = prompt, model = model, temperature = 0)
-    v <- .parse_verdict_01(raw)
-    if (is.na(v)) v <- 0L
-    verdicts[[i]] <- v
-  }
-
-  .average_precision(verdicts)
-}
-
-# ---- CONTEXT RECALL (DO NOT CHANGE) -----------------------------------------
-
-# Internal: Context recall classification prompt (sentence-level attribution)
-# Mirrors the Python definition: classify each sentence in the reference answer
-# as attributable (1) or not (0) to the retrieved context; score = mean(attributed).
-.score_context_recall_llm <- function(question, reference_answer, contexts, model = "gpt-4o-mini") {
-  if (is.null(reference_answer) || is.na(reference_answer) || !nzchar(trimws(reference_answer))) {
-    return(NA_real_)
-  }
-
-  ctx_joined <- paste(contexts, collapse = "\n")
-  answer_sents <- .split_sentences(reference_answer)
-
-  if (length(answer_sents) == 0L) {
-    return(NA_real_)
-  }
-
-  attributed_vec <- integer(length(answer_sents))
-
-  for (i in seq_along(answer_sents)) {
-    stmt <- answer_sents[[i]]
-
-    prompt <- paste0(
-      "Given a context, and an answer, analyze each sentence in the answer and classify if the sentence can be attributed to the given context or not. ",
-      "Use only 'Yes' (1) or 'No' (0) as a binary classification. Output json with reason.\n\n",
-      "Question:\n", question, "\n\n",
-      "Context:\n", ctx_joined, "\n\n",
-      "Answer sentence:\n", stmt, "\n\n",
-      "Return ONLY valid JSON: {\"statement\": <string>, \"reason\": <string>, \"attributed\": 0 or 1}."
-    )
-
-    raw <- generate_openai_chat(prompt = prompt, model = model, temperature = 0)
-    v <- .parse_attributed_01(raw)
-    if (is.na(v)) v <- 0L
-    attributed_vec[[i]] <- v
-  }
-
-  score <- sum(attributed_vec) / length(attributed_vec)
-  .clamp01(score)
-}
-
-# ---- ANSWER RELEVANCE (ALIGN WITH PYTHON) ------------------------------------
-
-# Internal: parse {question, noncommittal} from model response
-.parse_answer_relevance_gen <- function(x) {
-  # Defaults match Python behavior: if unusable, treat as invalid and noncommittal.
-  res <- list(question = "", noncommittal = 1L)
-
-  if (is.null(x) || !is.character(x) || length(x) != 1L) return(res)
-
-  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
-  if (!is.list(out)) return(res)
-
-  if (!is.null(out$question) && is.character(out$question) && length(out$question) == 1L) {
-    res$question <- as.character(out$question)
-  }
-  if (!is.null(out$noncommittal)) {
-    nc <- suppressWarnings(as.integer(out$noncommittal))
-    if (!is.na(nc)) res$noncommittal <- ifelse(nc == 1L, 1L, 0L)
-  }
-
-  res
-}
-
-# Internal: cosine similarity between one vector and a matrix of vectors
-.cosine_sim_many <- function(query_vec, doc_mat) {
-  q <- as.numeric(query_vec)
-  D <- as.matrix(doc_mat)
-
-  qn <- sqrt(sum(q * q))
-  dn <- sqrt(rowSums(D * D))
-  denom <- (dn * qn)
-  denom[denom == 0] <- NA_real_
-
-  sims <- as.numeric((D %*% q) / denom)
-  sims
-}
-
-# Internal: Answer relevance per RAGAS Python:
-# - generate N questions from answer + noncommittal flag
-# - score = mean cosine similarity(original_question, generated_questions) * (not all_noncommittal)
-.score_answer_relevance_llm <- function(
-  question,
-  answer,
-  model = "gpt-4o-mini",
-  strictness = 3L,
-  embedding_model = "text-embedding-3-small"
-) {
-  strictness <- as.integer(strictness)
-  if (is.na(strictness) || strictness <= 0L) strictness <- 3L
-
-  base_prompt <- paste0(
-    "Generate a question for the given answer and identify if the answer is noncommittal. ",
-    "Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. ",
-    "A noncommittal answer is evasive, vague, or ambiguous (e.g., \"I don't know\", \"I'm not sure\").\n\n",
-    "Answer:\n", answer, "\n\n",
-    "Return ONLY valid JSON: {\"question\": <string>, \"noncommittal\": 0 or 1}."
-  )
-
-  gens <- vector("list", strictness)
-  for (i in seq_len(strictness)) {
-    raw <- generate_openai_chat(prompt = base_prompt, model = model, temperature = 0)
-    gens[[i]] <- .parse_answer_relevance_gen(raw)
-  }
-
-  gen_questions <- vapply(gens, function(z) z$question %||% "", character(1))
-  noncommittal_flags <- vapply(gens, function(z) as.integer(z$noncommittal %||% 1L), integer(1))
-
-  if (all(trimws(gen_questions) == "")) {
-    return(NA_real_)
-  }
-
-  all_noncommittal <- all(noncommittal_flags == 1L)
-
-  q_vec <- get_openai_embeddings(c(question), model = embedding_model)
-  g_mat <- get_openai_embeddings(as.character(gen_questions), model = embedding_model)
-
-  sims <- .cosine_sim_many(q_vec[1, ], g_mat)
-  score <- mean(sims, na.rm = TRUE) * as.numeric(!all_noncommittal)
-
-  .clamp01(score)
-}
-
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-# ---- FAITHFULNESS (ALIGN WITH PYTHON) ----------------------------------------
-
-# Internal: parse {"statements":[...]} from statement generator response
-.parse_faithfulness_statements <- function(x) {
-  if (is.null(x) || !is.character(x) || length(x) != 1L) return(character(0L))
-  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
-  if (!is.list(out) || is.null(out$statements)) return(character(0L))
-  st <- out$statements
-  if (is.null(st)) return(character(0L))
-  st <- as.character(st)
-  st <- st[nzchar(trimws(st))]
-  st
-}
-
-# Internal: parse {"statements":[{"statement":..,"reason":..,"verdict":0/1}, ...]}
-.parse_faithfulness_verdicts <- function(x) {
-  if (is.null(x) || !is.character(x) || length(x) != 1L) return(integer(0L))
-  out <- suppressWarnings(tryCatch(jsonlite::fromJSON(x), error = function(e) NULL))
-  if (!is.list(out) || is.null(out$statements)) return(integer(0L))
-
-  st <- out$statements
-  # jsonlite may simplify to data.frame
-  if (is.data.frame(st)) {
-    if (!("verdict" %in% names(st))) return(integer(0L))
-    v <- suppressWarnings(as.integer(st$verdict))
-    v[is.na(v)] <- 0L
-    return(ifelse(v == 1L, 1L, 0L))
-  }
-
-  if (is.list(st)) {
-    v <- vapply(st, function(item) {
-      if (is.list(item) && !is.null(item$verdict)) {
-        vv <- suppressWarnings(as.integer(item$verdict))
-        if (!is.na(vv) && vv == 1L) return(1L)
-        return(0L)
-      }
-      0L
-    }, integer(1))
-    return(v)
-  }
-
-  integer(0L)
-}
-
-# Internal: Faithfulness per RAGAS Python:
-# 1) generate pronoun-free statements from answer using (question, answer)
-# 2) NLI judge each statement against joined retrieved contexts
-# 3) score = (#verdict==1) / (#statements), NaN if no statements
-.score_faithfulness_llm <- function(question, answer, contexts, model = "gpt-4o-mini") {
-  contexts_str <- paste(contexts, collapse = "\n")
-
-  # Statement generation (single call)
-  gen_prompt <- paste0(
-    "Given a question and an answer, analyze the complexity of each sentence in the answer. ",
-    "Break down each sentence into one or more fully understandable statements. ",
-    "Ensure that no pronouns are used in any statement. Format the outputs in JSON.\n\n",
-    "Question:\n", question, "\n\n",
-    "Answer:\n", answer, "\n\n",
-    "Return ONLY valid JSON: {\"statements\": [<string>, ...]}."
-  )
-
-  gen_raw <- generate_openai_chat(prompt = gen_prompt, model = model, temperature = 0)
-  statements <- .parse_faithfulness_statements(gen_raw)
-
-  if (length(statements) == 0L) {
-    return(NA_real_)
-  }
-
-  # NLI verdicts (single call for all statements, matching Python structure)
-  nli_prompt <- paste0(
-    "Your task is to judge the faithfulness of a series of statements based on a given context. ",
-    "For each statement you must return verdict as 1 if the statement can be directly inferred based on the context or 0 if the statement can not be directly inferred based on the context.\n\n",
-    "Context:\n", contexts_str, "\n\n",
-    "Statements (judge each):\n", jsonlite::toJSON(statements, auto_unbox = TRUE), "\n\n",
-    "Return ONLY valid JSON in this exact shape:\n",
-    "{\"statements\": [\n",
-    "  {\"statement\": <string>, \"reason\": <string>, \"verdict\": 0 or 1},\n",
-    "  ...\n",
-    "]}"
-  )
-
-  nli_raw <- generate_openai_chat(prompt = nli_prompt, model = model, temperature = 0)
-  verdicts <- .parse_faithfulness_verdicts(nli_raw)
-
-  if (length(verdicts) == 0L) {
-    # If parsing failed, be conservative
-    return(NA_real_)
-  }
-
-  score <- sum(verdicts == 1L) / length(verdicts)
-  .clamp01(score)
+  max(0, min(1, s))
 }
 
 # Internal: score one metric with OpenAI chat (expects generate_openai_chat in embeddings_openai.R)
-score_metric_llm <- function(
-  metric_name,
-  question,
-  answer,
-  contexts,
-  ground_truth = NULL,
-  model = "gpt-4o-mini",
-  embedding_model = NULL,
-  answer_relevance_strictness = 3L
-) {
-  # Special-case: context_precision in RAGAS is Average Precision over per-context 0/1 verdicts.
-  if (identical(metric_name, "context_precision")) {
-    answer_for_eval <- if (!is.null(ground_truth) && is.character(ground_truth) && length(ground_truth) == 1L && nzchar(trimws(ground_truth))) {
-      ground_truth
-    } else {
-      answer
-    }
-    return(.score_context_precision_llm(question, answer_for_eval, contexts, model = model))
-  }
-
-  # Special-case: context_recall uses the REFERENCE (ground truth) answer, sentence-level attribution.
-  if (identical(metric_name, "context_recall")) {
-    if (is.null(ground_truth) || !is.character(ground_truth) || length(ground_truth) != 1L || !nzchar(trimws(ground_truth))) {
-      return(NA_real_)
-    }
-    return(.score_context_recall_llm(question, ground_truth, contexts, model = model))
-  }
-
-  # Special-case: answer_relevance mirrors RAGAS Python (AnswerRelevancy / ResponseRelevancy)
-  if (identical(metric_name, "answer_relevance")) {
-    if (is.null(embedding_model) || !is.character(embedding_model) || length(embedding_model) != 1L || !nzchar(embedding_model)) {
-      embedding_model <- "text-embedding-3-small"
-    }
-    return(.score_answer_relevance_llm(
-      question = question,
-      answer = answer,
-      model = model,
-      strictness = answer_relevance_strictness,
-      embedding_model = embedding_model
-    ))
-  }
-
-  # Special-case: faithfulness mirrors RAGAS Python (statement generation + NLI)
-  if (identical(metric_name, "faithfulness")) {
-    return(.score_faithfulness_llm(question = question, answer = answer, contexts = contexts, model = model))
-  }
-
+score_metric_llm <- function(metric_name, question, answer, contexts, ground_truth = NULL, model = "gpt-4o-mini", seed = NULL) {
   ctx_block <- paste0("- ", contexts, collapse = "\n")
   gt_line <- if (!is.null(ground_truth) && is.character(ground_truth) && length(ground_truth) == 1L && nzchar(ground_truth)) {
     paste0("\nGround truth answer:\n", ground_truth, "\n")
@@ -508,8 +149,8 @@ score_metric_llm <- function(
     "- Be strict and consistent.\n"
   )
 
-  raw <- generate_openai_chat(prompt = prompt, model = model, temperature = 0)
-  .parse_score_01(raw)
+  raw <- generate_openai_chat(prompt = prompt, model = model, temperature = 0, seed = seed)
+  parse_score_01(raw)
 }
 
 #' Compute RAGAS-style metrics (LLM scored)
@@ -519,24 +160,17 @@ score_metric_llm <- function(
 #'
 #' Notes:
 #' - If `answer_reference` exists and is non-NA, it may be used as ground truth.
-#' - `context_precision` is implemented to mirror RAGAS (Python) behavior:
-#'   it computes **Average Precision** over per-context binary usefulness verdicts.
-#' - `context_recall` is implemented to mirror RAGAS (Python) behavior:
-#'   it computes the fraction of sentences in the **reference answer** that can be attributed to the retrieved context.
-#' - `answer_relevance` is implemented to mirror RAGAS (Python) behavior:
-#'   it generates multiple questions from the answer and scores cosine similarity to the original question,
-#'   penalizing noncommittal answers.
-#' - `faithfulness` is implemented to mirror RAGAS (Python) behavior:
-#'   it decomposes the answer into pronoun-free statements, then does NLI-style inference checks against contexts.
 #' - Requires an OpenAI API key via `OPENAI_API_KEY`.
 #'
 #' @param qa_log A tibble created and populated by [log_rag_interaction()].
 #' @param judge_model Character scalar; judge model name (default: "gpt-4o-mini").
-#' @param answer_relevance_strictness Integer; number of questions to generate per answer (default: 3).
+#' @param seed Optional integer. If provided (and supported by the underlying
+#'   model/provider), it is forwarded to the judge model calls to encourage
+#'   reproducible scores (typically together with `temperature = 0`).
 #'
 #' @return A tibble with one row per `qa_id` and metric columns.
 #' @export
-compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini", answer_relevance_strictness = 3L) {
+compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini", seed = NULL) {
   if (is.null(qa_log) || nrow(qa_log) == 0L) {
     return(qa_metrics_empty())
   }
@@ -552,38 +186,24 @@ compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini", answe
   }
 
   has_gt <- "answer_reference" %in% names(qa_log)
-  has_emb_model <- "embedding_model" %in% names(qa_log)
 
   rows <- lapply(seq_len(nrow(qa_log)), function(i) {
     qa_id  <- qa_log$qa_id[i]
     q      <- qa_log$question[i]
     a      <- qa_log$answer_model[i]
-
-    ctx <- unlist(qa_log$retrieved_texts[[i]])
-    ctx <- as.character(ctx)
-    ctx <- ctx[nzchar(trimws(ctx))]
+    ctx    <- unlist(qa_log$retrieved_texts[[i]])
     if (length(ctx) == 0L) ctx <- ""
 
     gt <- NULL
-    if (isTRUE(has_gt)) {
+    if (has_gt) {
       gt_val <- qa_log$answer_reference[i]
-      if (!is.na(gt_val) && nzchar(trimws(gt_val))) gt <- as.character(gt_val)
+      if (!is.na(gt_val) && nzchar(gt_val)) gt <- gt_val
     }
 
-    emb_model <- if (isTRUE(has_emb_model)) as.character(qa_log$embedding_model[i]) else "text-embedding-3-small"
-    if (is.na(emb_model) || !nzchar(emb_model)) emb_model <- "text-embedding-3-small"
-
-    cp <- score_metric_llm("context_precision", q, a, ctx, ground_truth = gt, model = judge_model)
-    cr <- score_metric_llm("context_recall",    q, a, ctx, ground_truth = gt, model = judge_model)
-    ar <- score_metric_llm(
-      "answer_relevance",
-      q, a, ctx,
-      ground_truth = gt,
-      model = judge_model,
-      embedding_model = emb_model,
-      answer_relevance_strictness = answer_relevance_strictness
-    )
-    fa <- score_metric_llm("faithfulness",      q, a, ctx, ground_truth = gt, model = judge_model)
+    cp <- score_metric_llm("context_precision", q, a, ctx, ground_truth = gt, model = judge_model, seed = seed)
+    cr <- score_metric_llm("context_recall",    q, a, ctx, ground_truth = gt, model = judge_model, seed = seed)
+    ar <- score_metric_llm("answer_relevance",  q, a, ctx, ground_truth = gt, model = judge_model, seed = seed)
+    fa <- score_metric_llm("faithfulness",      q, a, ctx, ground_truth = gt, model = judge_model, seed = seed)
 
     overall <- mean(c(cp, cr, ar, fa), na.rm = TRUE)
     if (is.nan(overall)) overall <- NA_real_
@@ -612,11 +232,11 @@ compute_ragas_metrics_llm <- function(qa_log, judge_model = "gpt-4o-mini", answe
 #' @param mode One of `"approx"` or `"llm"`. If NULL, uses option
 #'   `ragR.ragas_mode` (defaults to `"approx"`).
 #' @param judge_model Judge model for `mode="llm"` (default: "gpt-4o-mini").
-#' @param answer_relevance_strictness Integer; number of questions to generate per answer (default: 3).
+#' @param seed Optional integer. Forwarded to LLM-scored metrics when `mode="llm"`.
 #'
 #' @return A metrics tibble.
 #' @export
-compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-mini", answer_relevance_strictness = 3L) {
+compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-mini", seed = NULL) {
   if (is.null(mode)) {
     mode <- getOption("ragR.ragas_mode", "approx")
   }
@@ -625,6 +245,6 @@ compute_ragas_metrics <- function(qa_log, mode = NULL, judge_model = "gpt-4o-min
   if (identical(mode, "approx")) {
     compute_ragas_metrics_approx(qa_log)
   } else {
-    compute_ragas_metrics_llm(qa_log, judge_model = judge_model, answer_relevance_strictness = answer_relevance_strictness)
+    compute_ragas_metrics_llm(qa_log, judge_model = judge_model, seed = seed)
   }
 }

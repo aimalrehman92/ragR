@@ -89,8 +89,8 @@ get_openai_embeddings <- function(
 #' @param system_message Optional system message. If NULL, a default is used.
 #' @param temperature Numeric; sampling temperature (0 = deterministic).
 #' @param max_output_tokens Integer; maximum tokens to generate. Sent as `max_tokens`.
-#' @param response_format Optional list; passed to the API as `response_format` to
-#'   enable JSON mode / structured outputs. For JSON mode use list(type="json_object").
+#' @param seed Optional integer. If provided (and supported by the underlying
+#'   model/provider), it is sent as `seed` to encourage reproducible outputs.
 #' @param api_key OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.
 #'
 #' @return Character scalar containing the model's answer.
@@ -101,7 +101,7 @@ generate_openai_chat <- function(
   system_message    = NULL,
   temperature       = 0,
   max_output_tokens = 512L,
-  response_format   = NULL,
+  seed              = NULL,
   api_key           = NULL
 ) {
   if (!is.character(prompt) || length(prompt) != 1L) {
@@ -123,9 +123,13 @@ generate_openai_chat <- function(
     stop("max_output_tokens must be a positive integer.", call. = FALSE)
   }
 
-  if (!is.null(response_format)) {
-    if (!is.list(response_format) || is.null(response_format$type) || !is.character(response_format$type)) {
-      stop("response_format must be NULL or a list with at least a character field `type`.", call. = FALSE)
+  if (!is.null(seed)) {
+    if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) {
+      stop("seed must be NULL or a single non-NA numeric value.", call. = FALSE)
+    }
+    seed <- as.integer(seed)
+    if (is.na(seed) || seed < 0L) {
+      stop("seed must be a non-negative integer.", call. = FALSE)
     }
   }
 
@@ -150,8 +154,8 @@ generate_openai_chat <- function(
     max_tokens  = max_output_tokens
   )
 
-  if (!is.null(response_format)) {
-    body$response_format <- response_format
+  if (!is.null(seed)) {
+    body$seed <- seed
   }
 
   req <- httr2::request("https://api.openai.com/v1/chat/completions") |>

@@ -11,6 +11,7 @@
 # Notes:
 #   - Set USE_LLM_METRICS = TRUE to compute "actual" (LLM-based) metrics.
 #   - Set USE_LLM_METRICS = FALSE to compute lexical approximations.
+#   - Set SEED to an integer for more reproducible LLM-judge scoring (if supported by model).
 
 library(ragR)
 
@@ -18,6 +19,9 @@ library(ragR)
 
 # Choose which metric implementation to use:
 USE_LLM_METRICS <- TRUE # TRUE = LLM-based ("actual"), FALSE = approximations
+
+# Optional: seed for judge model calls (set NULL to disable)
+SEED <- 42L  # e.g., 42L; set to NULL to disable
 
 qa_log_path     <- "db/qa_log.rds"
 qa_metrics_path <- "db/qa_metrics.rds"
@@ -40,7 +44,8 @@ cat("=== ragR Evaluation Pipeline ===\n")
 cat("QA log path     :", qa_log_path, "\n")
 cat("QA metrics path :", qa_metrics_path, "\n")
 cat("Output dir      :", output_dir, "\n")
-cat("Mode            :", if (USE_LLM_METRICS) "LLM (actual) metrics" else "Approx (proxy) metrics", "\n\n")
+cat("Mode            :", if (USE_LLM_METRICS) "LLM (actual) metrics" else "Approx (proxy) metrics", "\n")
+cat("Seed            :", if (USE_LLM_METRICS) as.character(SEED) else "(n/a)", "\n\n")
 
 # 1) Load QA log
 stop_if_missing(qa_log_path)
@@ -79,7 +84,7 @@ if (USE_LLM_METRICS) {
 cat("Computing metrics...\n")
 
 qa_metrics <- if (USE_LLM_METRICS) {
-  compute_ragas_metrics_llm(qa_log)
+  compute_ragas_metrics_llm(qa_log, seed = SEED)
 } else {
   compute_ragas_metrics_approx(qa_log)
 }
@@ -116,6 +121,7 @@ cat("\nDone.\n")
 
 invisible(list(
   mode       = if (USE_LLM_METRICS) "llm" else "approx",
+  seed       = if (USE_LLM_METRRICS) SEED else NULL,
   qa_log     = qa_log,
   qa_metrics = qa_metrics,
   summary    = summary_tbl,
