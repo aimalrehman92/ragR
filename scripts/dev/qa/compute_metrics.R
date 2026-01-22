@@ -37,9 +37,10 @@ if (nrow(qa_log) == 0L) {
   quit(save = "no", status = 0)
 }
 
-cat("Computing RAGAS metrics using:",
-    if (USE_LLM_METRICS) "LLM (actual)" else "Approx (proxy)",
-    "implementation...\n\n"
+cat(
+  "Computing RAGAS metrics using:",
+  if (USE_LLM_METRICS) "LLM (actual)" else "Approx (proxy)",
+  "implementation...\n\n"
 )
 
 qa_metrics <- if (USE_LLM_METRICS) {
@@ -48,11 +49,13 @@ qa_metrics <- if (USE_LLM_METRICS) {
   compute_ragas_metrics_approx(qa_log)
 }
 
-# Basic sanity checks
+# -------------------------- Sanity checks ------------------------------------
+
 required_cols <- c(
   "qa_id", "context_precision", "context_recall",
   "answer_relevance", "faithfulness", "ragas_overall"
 )
+
 missing_cols <- setdiff(required_cols, names(qa_metrics))
 if (length(missing_cols) > 0L) {
   stop(
@@ -62,12 +65,33 @@ if (length(missing_cols) > 0L) {
   )
 }
 
+# ----------------------------- Save ------------------------------------------
+
 save_qa_metrics(qa_metrics, qa_metrics_path)
 
 cat("✔ Saved qa_metrics to:", qa_metrics_path, "\n")
 cat("Rows:", nrow(qa_metrics), "\n\n")
 
+# ----------------------------- Output ----------------------------------------
+
 cat("Preview (first 6 rows):\n")
 print(utils::head(qa_metrics))
+
+cat("\nMean RAGAS metrics:\n")
+
+metric_means <- colMeans(
+  qa_metrics[
+    , c(
+      "context_precision",
+      "context_recall",
+      "answer_relevance",
+      "faithfulness",
+      "ragas_overall"
+    )
+  ],
+  na.rm = TRUE
+)
+
+print(round(metric_means, 4))
 
 invisible(qa_metrics)

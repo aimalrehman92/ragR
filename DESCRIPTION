@@ -19,7 +19,8 @@ Imports:
     jsonlite,
     pdftools,
     readtext,
-    tibble
+    tibble,
+    ggplot2
 Suggests:
     plumber,
     stringr,
