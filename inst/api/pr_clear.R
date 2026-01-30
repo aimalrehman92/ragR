@@ -1,5 +1,3 @@
-# inst/api/pr_clear.R
-
 library(jsonlite)
 library(ragR)
 

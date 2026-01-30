@@ -34,16 +34,15 @@ system_prompt <- "You are a helpful assistant."
 
 # Add as many questions as you want to log in one run:
 questions <- c(
-  "What is percentage of assignments or homeworks in the final exam for STAT 8670?",
-  "Who is the professor for STAT 8581?",
-  "What is the grade distribution for STAT 8581?",
-  "What are the exam dates for STAT 8581?",
-  "Who is the professor for STAT 8670?",
-  "What is the attendance policy for STAT 8670?",
-  "What is the attendance policy for STAT 8581?",
-  "Who is teaching STAT 8670?",
-  "Is it the final exam or project for STAT 8670?",
-  "Does happiness increase by sharing with others?"
+"What percentage of the final grade is allocated to homework in STAT 8670?",
+"Who is the instructor for STAT 8672?",
+"What are the main topics covered in MATH 8600?",
+"What is the prerequisite for enrolling in STAT 8670?",
+"What software is primarily used in STAT 8672?",
+"What is the attendance policy for MATH 4752/6752?",
+"If I want to ask for a sick leave, what documents should I provide?",
+"Why is the sky blue?",
+"How is the weather next week?"
 )
 
 # ----------------------------- Run -------------------------------------------

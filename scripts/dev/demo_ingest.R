@@ -26,10 +26,16 @@ chunk_overlap     <- 500L
 
 embedding_model   <- "text-embedding-3-small"
 
+# example_paths <- c(
+#   "data-raw/Math 8600 Syllabus.pdf",
+#   "data-raw/STAT8670_syllabus_Sep2.pdf",
+#   "data-raw/Stat8760Syllabus.pdf",
+#   "data-raw/Syllabus_STAT8672_Lin_Spring2026.pdf",
+#   "data-raw/Syllabus4752_6752_Lin_Fall2025.pdf"
+# )
+
 example_paths <- c(
-  "data-raw/STAT_8670_Syllabus.txt",
-  "data-raw/STAT_8581_Syllabus.txt",
-  "data-raw/happy_essay.pdf"
+  "data-raw/Anatomy_Gray.txt"
 )
 
 # -----------------------------------------------

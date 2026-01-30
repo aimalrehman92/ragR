@@ -27,9 +27,9 @@ api$filter("cors", function(req, res) {
 })
 # -----------------------------------------------------------------------------
 
-api$handle("POST", "/ingest", source("inst/api/pr_ingest.R")[[1]])
-api$handle("POST", "/chat",   source("inst/api/pr_chat.R")[[1]])
-api$handle("POST", "/clear",  source("inst/api/pr_clear.R")[[1]])
+# NOTE: /ingest removed (no ingestion API)
+api$handle("POST", "/chat",  source("inst/api/pr_chat.R")[[1]])
+api$handle("POST", "/clear", source("inst/api/pr_clear.R")[[1]])
 
 api$handle("POST", "/clear_all", function(req, res) {
   ragR::api_clear_all_handler()

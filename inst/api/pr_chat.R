@@ -1,5 +1,3 @@
-# inst/api/pr_chat.R
-
 library(jsonlite)
 library(ragR)
 
