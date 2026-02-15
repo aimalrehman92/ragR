@@ -14,7 +14,9 @@ Cleaned character scalar
 }
 \description{
 \itemize{
-\item Replaces \verb{\\r} and \verb{\\n} with spaces
+\item Forces UTF-8
+\item Replaces carriage returns and newlines with spaces
+\item Removes control characters
 \item Collapses multiple whitespace
 \item Trims
 }

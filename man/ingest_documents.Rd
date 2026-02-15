@@ -11,6 +11,12 @@ ingest_documents(
   chunk_overlap = 50L,
   chunking_strategy = c("character", "sentence"),
   embedding_model = "text-embedding-3-small",
+  embedding_batch_size = 128L,
+  embedding_max_chars = 8000L,
+  retry = TRUE,
+  max_retries = 5L,
+  resume = TRUE,
+  checkpoint_path = NULL,
   use_openai = TRUE,
   verbose = TRUE
 )
@@ -27,6 +33,22 @@ ingest_documents(
 \item{chunking_strategy}{Character; \code{"character"} or \code{"sentence"}.}
 
 \item{embedding_model}{Character; OpenAI embedding model name.}
+
+\item{embedding_batch_size}{Integer; number of chunks per embeddings request.
+Default 128. Internally capped for safety.}
+
+\item{embedding_max_chars}{Integer; hard cap (in characters) applied to each chunk
+before embedding to avoid request failures. Default 8000.}
+
+\item{retry}{Logical; whether to retry transient API failures. Default TRUE.}
+
+\item{max_retries}{Integer; maximum retries per batch (transient failures). Default 5.}
+
+\item{resume}{Logical; whether to use a local checkpoint to skip chunks already
+embedded in a previous run. Default TRUE.}
+
+\item{checkpoint_path}{Optional character scalar; file path for the resume
+checkpoint. If NULL, uses a temp file based on the collection name.}
 
 \item{use_openai}{Logical; if TRUE, use OpenAI embeddings. If FALSE,
 use a local dummy embedding generator (for offline development / tests).}
@@ -49,8 +71,18 @@ Chunking strategies:
 
 Cleaning strategy (minimal, deterministic):
 \itemize{
-\item Replace \verb{\\r} and \verb{\\n}line breaks with spaces
+\item Replace carriage returns and newlines with spaces
+\item Remove control characters
 \item Collapse multiple whitespace to a single space
 \item Trim leading/trailing whitespace
+}
+
+Embedding strategy (robust by default):
+\itemize{
+\item Embeddings are computed in batches (default \code{embedding_batch_size = 128})
+\item Batches are retried with exponential backoff on transient failures (e.g., 429/5xx)
+\item If a 400 occurs due to request size, the batch is automatically split
+\item Each chunk is truncated to a safe maximum length before embedding
+\item Optional resumable ingestion via a local checkpoint file
 }
 }

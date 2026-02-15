@@ -2,3 +2,7 @@
 .RData
 .DS_Store
 db/*.rds
+db/*.csv
+db/*.jsonl
+db/backups/*
+reports/ragas/
