@@ -22,10 +22,11 @@ qa_metrics_empty <- function() {
 
 # ---- APPROX / PROXY METRICS --------------------------------------------------
 
-#' Compute RAGAS-style metrics (approx / lexical proxy)
+#' Compute RAGAS-style metrics (deterministic, reference-based)
 #'
-#' Computes deterministic lexical approximations (token overlap / Jaccard).
-#' These do NOT require ground-truth answers.
+#' Computes deterministic lexical proxies using token overlap / Jaccard.
+#' This mode assumes a reference (ground-truth) answer is available for each
+#' interaction via the `answer_reference` column in the QA log.
 #'
 #' @param qa_log A tibble created and populated by [log_rag_interaction()].
 #'
@@ -36,7 +37,9 @@ compute_ragas_metrics_approx <- function(qa_log) {
     return(qa_metrics_empty())
   }
 
-  required_cols <- c("qa_id", "question", "answer_model", "retrieved_texts")
+  # NOTE: This deterministic mode assumes a reference (ground-truth) answer is available
+  # for each interaction via `answer_reference`.
+  required_cols <- c("qa_id", "question", "answer_model", "answer_reference", "retrieved_texts")
   missing_cols <- setdiff(required_cols, names(qa_log))
   if (length(missing_cols) > 0L) {
     stop(
@@ -47,7 +50,7 @@ compute_ragas_metrics_approx <- function(qa_log) {
   }
 
   tokenize <- function(x) {
-    if (is.na(x) || !nzchar(x)) return(character(0L))
+    if (is.null(x) || is.na(x) || !nzchar(x)) return(character(0L))
     toks <- unlist(strsplit(tolower(x), "[^[:alnum:]]+"))
     toks[nzchar(toks)]
   }
@@ -56,6 +59,7 @@ compute_ragas_metrics_approx <- function(qa_log) {
     qa_id  <- qa_log$qa_id[i]
     q_text <- qa_log$question[i]
     a_text <- qa_log$answer_model[i]
+    g_text <- qa_log$answer_reference[i]
 
     ctx_vec <- character(0L)
     if (!is.null(qa_log$retrieved_texts) && length(qa_log$retrieved_texts) >= i) {
@@ -65,33 +69,41 @@ compute_ragas_metrics_approx <- function(qa_log) {
 
     q_tokens <- unique(tokenize(q_text))
     a_tokens <- unique(tokenize(a_text))
+    g_tokens <- unique(tokenize(g_text))
     c_tokens <- unique(tokenize(ctx_text))
 
-    # Context precision: fraction of answer tokens that appear in retrieved context
-    if (length(a_tokens) == 0L || length(c_tokens) == 0L) {
+    # ---- Deterministic (reference-based) proxies --------------------------------
+    # Context Precision (retrieval relevance): fraction of retrieved context tokens
+    # that overlap with the reference answer.
+    if (length(c_tokens) == 0L || length(g_tokens) == 0L) {
       context_precision <- 0
     } else {
-      context_precision <- length(intersect(a_tokens, c_tokens)) / length(a_tokens)
+      context_precision <- length(intersect(c_tokens, g_tokens)) / length(c_tokens)
     }
 
-    # Context recall: fraction of context tokens that appear in answer
-    if (length(c_tokens) == 0L) {
+    # Context Recall (retrieval sufficiency): fraction of reference answer tokens
+    # covered by the retrieved context.
+    if (length(g_tokens) == 0L || length(c_tokens) == 0L) {
       context_recall <- 0
     } else {
-      context_recall <- length(intersect(c_tokens, a_tokens)) / length(c_tokens)
+      context_recall <- length(intersect(c_tokens, g_tokens)) / length(g_tokens)
     }
 
-    # Answer relevance: Jaccard similarity between question and answer tokens
-    if (length(q_tokens) == 0L && length(a_tokens) == 0L) {
+    # Faithfulness (answer grounding): fraction of answer tokens supported by context.
+    if (length(a_tokens) == 0L || length(c_tokens) == 0L) {
+      faithfulness <- 0
+    } else {
+      faithfulness <- length(intersect(a_tokens, c_tokens)) / length(a_tokens)
+    }
+
+    # Answer Relevance (reference alignment): Jaccard similarity between answer and reference.
+    if (length(a_tokens) == 0L && length(g_tokens) == 0L) {
       answer_relevance <- 0
     } else {
-      inter_qa <- length(intersect(q_tokens, a_tokens))
-      union_qa <- length(union(q_tokens, a_tokens))
-      answer_relevance <- if (union_qa == 0L) 0 else inter_qa / union_qa
+      inter_ag <- length(intersect(a_tokens, g_tokens))
+      union_ag <- length(union(a_tokens, g_tokens))
+      answer_relevance <- if (union_ag == 0L) 0 else inter_ag / union_ag
     }
-
-    # Faithfulness: proxy (same as context_precision here)
-    faithfulness <- context_precision
 
     ragas_overall <- mean(c(context_precision, context_recall, answer_relevance, faithfulness))
 
