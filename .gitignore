@@ -6,3 +6,4 @@ db/*.csv
 db/*.jsonl
 db/backups/*
 reports/ragas/
+data-raw/*

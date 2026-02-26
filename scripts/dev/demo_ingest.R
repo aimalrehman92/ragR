@@ -22,10 +22,10 @@ collection_name   <- "default"
 chunking_strategy <- "character"
 
 # Only used for character chunking:
-chunk_size        <- 1500L
-chunk_overlap     <- 500L
+chunk_size    <- 3200L
+chunk_overlap <- as.integer(round(0.30 * chunk_size))
 
-embedding_model       <- "text-embedding-3-small"
+embedding_model  <- "text-embedding-3-small"
 
 # Robust defaults (recommended)
 embedding_batch_size  <- 128L     # batches per embeddings request (internally capped)
@@ -38,7 +38,11 @@ resume                <- TRUE     # use a local checkpoint to skip already-embed
 checkpoint_path       <- NULL
 
 example_paths <- c(
-  "data-raw/Anatomy_Gray.txt"
+  "data-raw/Math 8600 Syllabus.pdf",
+  "data-raw/STAT8670_syllabus_Sep2.pdf",
+  "data-raw/Stat8760Syllabus.pdf",
+  "data-raw/Syllabus_STAT8672_Lin_Spring2026.pdf",
+  "data-raw/Syllabus4752_6752_Lin_Fall2025.pdf"
 )
 
 # -----------------------------------------------

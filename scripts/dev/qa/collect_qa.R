@@ -26,20 +26,30 @@ embedding_model <- "text-embedding-3-small"
 chat_model      <- "gpt-4o-mini"
 
 # Generation settings (exposed)
-temperature       <- 0.5
-max_output_tokens <- 300L
+temperature       <- 0
+max_output_tokens <- 1000L
 
 # User-defined system prompt (exposed)
-system_prompt <- "You are a helpful assistant."
+system_prompt <- "You are a helpful academic assistant."
 
 # Add as many questions as you want to log in one run:
 questions <- c(
-"What is the difference between gross anatomy and microscopic anatomy?",
-"What are the two main approaches used to study gross anatomy and how do they differ?",
-"What defines the anatomical position of the human body?",
-"Why does bone appear white and air appear dark on an X-ray image?",
-"Do we get Groundhog Day off?",
-"Where is my nearest Apple store?"
+"What percentage of the final grade is allocated to homework in STAT 8670?",
+"Who is the instructor for STAT 8672?",
+"What are the main topics covered in MATH 8600?",
+"What is the prerequisite for enrolling in STAT 8670?",
+"What software is primarily used in STAT 8672?",
+"What is the attendance policy for MATH 4752/6752?",
+"If I want to ask for a sick leave, what documents should I provide?",
+"Why is the sky blue?",
+"How is the weather next week?"
+
+#"What is the difference between gross anatomy and microscopic anatomy?",
+#"What are the two main approaches used to study gross anatomy and how do they differ?",
+#"What defines the anatomical position of the human body?",
+#"Why does bone appear white and air appear dark on an X-ray image?",
+#"Do we get Groundhog Day off?",
+#"Where is my nearest Apple store?"
 )
 
 # ----------------------------- Run -------------------------------------------
