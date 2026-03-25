@@ -13,15 +13,15 @@ library(ggplot2)
 
 # ----------------------------- Config ----------------------------------------
 
-USE_LLM_METRICS <- TRUE  # TRUE = LLM-based ("actual"), FALSE = approximations
+USE_LLM_METRICS <- FALSE  # TRUE = LLM-based ("actual"), FALSE = approximations
 SEED <- 42L              # set to NULL to disable
 
 qa_log_path     <- "db/qa_log.rds"
-qa_metrics_path <- "db/qa_metrics.rds"
+qa_metrics_path <- "db/qa_metrics_proxy.rds"
 
 output_dir  <- file.path("reports", "ragas")
-summary_csv <- file.path(output_dir, "ragas_summary.csv")
-plot_png    <- file.path(output_dir, "ragas_means.png")
+summary_csv <- file.path(output_dir, "ragas_summary_proxy.csv")
+plot_png    <- file.path(output_dir, "ragas_means_proxy.png")
 
 # Plot styling
 R_LOGO_BLUE <- "#276DC3"   # close to R-logo blue
