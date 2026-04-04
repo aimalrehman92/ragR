@@ -4,28 +4,39 @@
 \alias{compute_ragas_metrics_llm}
 \title{Compute RAGAS-style metrics (LLM scored)}
 \usage{
-compute_ragas_metrics_llm(qa_log, judge_model = "gpt-4o-mini", seed = NULL)
+compute_ragas_metrics_llm(
+  qa_log,
+  judge_model = "gpt-4o-mini",
+  seed = NULL,
+  embedding_model = "text-embedding-3-small",
+  answer_relevance_strictness = 3L
+)
 }
 \arguments{
 \item{qa_log}{A tibble created and populated by \code{\link[=log_rag_interaction]{log_rag_interaction()}}.}
 
 \item{judge_model}{Character scalar; judge model name (default: "gpt-4o-mini").}
 
-\item{seed}{Optional integer. If provided (and supported by the underlying
-model/provider), it is forwarded to the judge model calls to encourage
-reproducible scores (typically together with \code{temperature = 0}).}
+\item{seed}{Optional integer forwarded to judge model calls.}
+
+\item{embedding_model}{Embedding model name used for answer relevance.}
+
+\item{answer_relevance_strictness}{Number of generated reverse questions for
+answer relevance. Python RAGAS defaults to 3.}
 }
 \value{
 A tibble with one row per \code{qa_id} and metric columns.
 }
 \description{
-This is an LLM-based scoring implementation: it asks a judge model to score
-each metric in \eqn{[0,1]} from the QA log’s question/answer/retrieved contexts.
+This implementation mirrors the structured Python RAGAS workflow rather than
+asking the judge model for one direct scalar score per metric.
 }
 \details{
 Notes:
 \itemize{
-\item If \code{answer_reference} exists and is non-NA, it may be used as ground truth.
-\item Requires an OpenAI API key via \code{OPENAI_API_KEY}.
+\item \code{context_precision} uses \code{answer_reference} if available; otherwise it uses
+\code{answer_model}, matching the Python with-reference / without-reference split.
+\item \code{answer_relevance} requires an embedding helper to be available in the
+package environment.
 }
 }

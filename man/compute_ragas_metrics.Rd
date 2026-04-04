@@ -8,7 +8,9 @@ compute_ragas_metrics(
   qa_log,
   mode = NULL,
   judge_model = "gpt-4o-mini",
-  seed = NULL
+  seed = NULL,
+  embedding_model = "text-embedding-3-small",
+  answer_relevance_strictness = 3L
 )
 }
 \arguments{
@@ -20,6 +22,11 @@ compute_ragas_metrics(
 \item{judge_model}{Judge model for \code{mode="llm"} (default: "gpt-4o-mini").}
 
 \item{seed}{Optional integer. Forwarded to LLM-scored metrics when \code{mode="llm"}.}
+
+\item{embedding_model}{Embedding model for answer relevance when \code{mode="llm"}.}
+
+\item{answer_relevance_strictness}{Number of reverse questions generated for
+answer relevance when \code{mode="llm"}.}
 }
 \value{
 A metrics tibble.

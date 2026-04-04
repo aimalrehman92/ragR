@@ -2,7 +2,7 @@
 % Please edit documentation in R/ragas_metrics.R
 \name{compute_ragas_metrics_approx}
 \alias{compute_ragas_metrics_approx}
-\title{Compute RAGAS-style metrics (approx / lexical proxy)}
+\title{Compute RAGAS-style metrics (deterministic, reference-based)}
 \usage{
 compute_ragas_metrics_approx(qa_log)
 }
@@ -13,6 +13,7 @@ compute_ragas_metrics_approx(qa_log)
 A tibble with one row per \code{qa_id} and metric columns.
 }
 \description{
-Computes deterministic lexical approximations (token overlap / Jaccard).
-These do NOT require ground-truth answers.
+Computes deterministic lexical proxies using token overlap / Jaccard.
+This mode assumes a reference (ground-truth) answer is available for each
+interaction via the \code{answer_reference} column in the QA log.
 }

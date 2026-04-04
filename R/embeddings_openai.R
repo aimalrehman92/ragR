@@ -104,6 +104,7 @@ generate_openai_chat <- function(
   seed              = NULL,
   api_key           = NULL
 ) {
+  print("CALLING OPENAI API...")
   if (!is.character(prompt) || length(prompt) != 1L) {
     stop("prompt must be a single character string.", call. = FALSE)
   }
