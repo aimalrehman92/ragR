@@ -25,7 +25,6 @@ collection_name <- "default"
 # Use paths relative to the project root.
 input_paths <- c(
   # "data-raw/social_media policy brief.pdf",
-  "data-raw/Anatomy_Gray.txt",
   "data-raw/Anatomy_Gray.txt"
 )
 
