@@ -2,13 +2,12 @@
 % Please edit documentation in R/ragas_report.R
 \name{generate_ragas_report}
 \alias{generate_ragas_report}
-\title{Generate a RAGAS performance report (mode-aware)}
+\title{Generate a RAGAS performance report}
 \usage{
 generate_ragas_report(
   qa_log_path = "db/qa_log.rds",
   qa_metrics_path = "db/qa_metrics.rds",
   output_dir = "reports/ragas",
-  mode = NULL,
   judge_model = "gpt-4o-mini"
 )
 }
@@ -19,15 +18,13 @@ generate_ragas_report(
 
 \item{output_dir}{Output directory for CSV/PNG (default: "reports/ragas").}
 
-\item{mode}{\code{"approx"} or \code{"llm"}. If NULL, uses option \code{ragR.ragas_mode}.}
-
-\item{judge_model}{Judge model used when \code{mode="llm"} (default: "gpt-4o-mini").}
+\item{judge_model}{Judge model used for LLM scoring (default: "gpt-4o-mini").}
 }
 \value{
 A list with: status, n_qa, qa_metrics_path, summary_csv_path, plot_path.
 }
 \description{
-Loads a QA log from disk, computes metrics (approx or llm), writes:
+Loads a QA log from disk, computes LLM-scored RAGAS-style metrics, and writes:
 \itemize{
 \item metrics RDS (qa_metrics_path)
 \item summary CSV (ragas_summary.csv)

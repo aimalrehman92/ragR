@@ -15,24 +15,28 @@ generate_openai_chat(
 )
 }
 \arguments{
-\item{prompt}{Character scalar; the final prompt (includes question + context).}
+\item{prompt}{Character scalar; the user/content prompt.}
 
-\item{model}{Character scalar; chat model name (e.g., "gpt-4o-mini").}
+\item{model}{Character scalar; chat model name, e.g., \code{"gpt-4o-mini"}.}
 
-\item{system_message}{Optional system message. If NULL, a default is used.}
+\item{system_message}{Optional API-level system message. If NULL or empty,
+no system message is sent.}
 
-\item{temperature}{Numeric; sampling temperature (0 = deterministic).}
+\item{temperature}{Numeric; sampling temperature.}
 
-\item{max_output_tokens}{Integer; maximum tokens to generate. Sent as \code{max_tokens}.}
+\item{max_output_tokens}{Integer or NULL; maximum tokens to generate. If NULL,
+the parameter is omitted from the request.}
 
-\item{seed}{Optional integer. If provided (and supported by the underlying
-model/provider), it is sent as \code{seed} to encourage reproducible outputs.}
+\item{seed}{Optional integer. If provided and supported by the model/provider,
+it is sent as \code{seed} to encourage reproducible outputs.}
 
-\item{api_key}{OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.}
+\item{api_key}{OpenAI API key. If NULL, uses the \code{OPENAI_API_KEY}
+environment variable.}
 }
 \value{
 Character scalar containing the model's answer.
 }
 \description{
-Used by the RAG pipeline to generate the final answer from a constructed prompt.
+Used by the RAG pipeline and RAGAS-style metric prompts to generate text from
+a constructed prompt.
 }

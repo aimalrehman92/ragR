@@ -3,7 +3,7 @@
 #' Query the RAG pipeline
 #'
 #' Takes a user question, embeds it, retrieves relevant chunks from a vector store,
-#' constructs a prompt, and calls an LLM to generate an answer.
+#' constructs a grounded RAG prompt, and calls an LLM to generate an answer.
 #'
 #' @param question Character scalar.
 #' @param collection Vector store collection name.
@@ -14,13 +14,13 @@
 #' @param max_output_tokens Integer or NULL; maximum output tokens for the chat model.
 #' @param score_threshold Numeric; minimum similarity score to keep a retrieved chunk.
 #'   Applied only if `retrieved` includes a `score` column.
-#' @param system_prompt Character; system instruction prepended to the prompt.
+#' @param system_prompt Character; API-level system instruction passed to the chat model.
 #'
 #' @return A list with:
 #'   \item{answer}{Model-generated answer}
-#'   \item{retrieved}{Tibble of retrieved chunks (post-filtering)}
-#'   \item{prompt}{Final prompt sent to the model}
-#'   \item{model}{Model used}
+#'   \item{retrieved}{Tibble/data frame of retrieved chunks after filtering}
+#'   \item{prompt}{Final grounded RAG prompt sent as the user/content prompt}
+#'   \item{model}{Chat model used}
 #' @export
 query_rag <- function(
   question,
@@ -44,6 +44,9 @@ query_rag <- function(
   }
   if (!is.numeric(temperature) || length(temperature) != 1L) {
     stop("temperature must be a single numeric value.", call. = FALSE)
+  }
+  if (!is.character(system_prompt) || length(system_prompt) != 1L) {
+    stop("system_prompt must be a single character string.", call. = FALSE)
   }
   if (!is.null(max_output_tokens)) {
     if (!is.numeric(max_output_tokens) || length(max_output_tokens) != 1L || max_output_tokens <= 0) {
@@ -73,21 +76,24 @@ query_rag <- function(
 
   # 2b) Optional score threshold filter
   if ("score" %in% names(retrieved)) {
-    retrieved <- retrieved[!is.na(retrieved$score) & retrieved$score >= score_threshold, , drop = FALSE]
+    retrieved <- retrieved[
+      !is.na(retrieved$score) & retrieved$score >= score_threshold,
+      ,
+      drop = FALSE
+    ]
   }
 
   if (!is.data.frame(retrieved) || nrow(retrieved) == 0L) {
     stop("No retrieved chunks passed score_threshold.", call. = FALSE)
   }
 
-  # 3) Build prompt (supports user-provided system_prompt)
+  # 3) Build grounded RAG prompt
   prompt <- build_rag_prompt(
-    question      = question,
-    retrieved     = retrieved,
-    system_prompt = system_prompt
+    question  = question,
+    retrieved = retrieved
   )
 
-  # Ensure prompt is a single string (defensive)
+  # Ensure prompt is a single string
   prompt <- as.character(prompt[[1]])
 
   # 4) Call chat model
@@ -99,7 +105,7 @@ query_rag <- function(
     max_output_tokens = max_output_tokens
   )
 
-  # 5) Return structured result (includes final prompt for logging)
+  # 5) Return structured result
   list(
     answer    = answer,
     retrieved = retrieved,
@@ -113,23 +119,18 @@ query_rag <- function(
 #'
 #' @param question Character scalar.
 #' @param retrieved A tibble/data frame of retrieved chunks.
-#' @param system_prompt Character; system instruction prepended to the prompt.
 #'
-#' @return Character scalar: the constructed prompt.
+#' @return Character scalar: the constructed grounded RAG prompt.
 #' @keywords internal
 build_rag_prompt <- function(
   question,
-  retrieved,
-  system_prompt = ""
+  retrieved
 ) {
   if (!is.character(question) || length(question) != 1L) {
     stop("question must be a single character string.", call. = FALSE)
   }
   if (!is.data.frame(retrieved) || nrow(retrieved) == 0L) {
     stop("retrieved must be a non-empty data frame.", call. = FALSE)
-  }
-  if (!is.character(system_prompt) || length(system_prompt) != 1L) {
-    stop("system_prompt must be a single character string.", call. = FALSE)
   }
 
   # Find the column that holds chunk text
@@ -148,19 +149,11 @@ build_rag_prompt <- function(
   contexts <- retrieved[[text_col]]
 
   context_block <- paste0(
-    #"Chunk ", seq_along(contexts), ":\n",
     contexts,
     collapse = "\n\n"
   )
 
-  # Ensure system prompt ends with a blank line if provided
-  sys <- ""
-  if (nzchar(trimws(system_prompt))) {
-    sys <- paste0(system_prompt, "\n\n")
-  }
-
-  Prompt <- paste0(
-    sys,
+  prompt <- paste0(
     "You are given the following context passages:\n\n",
     context_block,
     "\n\nUsing ONLY the information in the context above, answer the question below.\n",
@@ -170,5 +163,5 @@ build_rag_prompt <- function(
     "\n\nAnswer:"
   )
 
-  Prompt
+  prompt
 }

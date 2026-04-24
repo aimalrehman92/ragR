@@ -34,16 +34,16 @@ query_rag(
 \item{score_threshold}{Numeric; minimum similarity score to keep a retrieved chunk.
 Applied only if \code{retrieved} includes a \code{score} column.}
 
-\item{system_prompt}{Character; system instruction prepended to the prompt.}
+\item{system_prompt}{Character; API-level system instruction passed to the chat model.}
 }
 \value{
 A list with:
 \item{answer}{Model-generated answer}
-\item{retrieved}{Tibble of retrieved chunks (post-filtering)}
-\item{prompt}{Final prompt sent to the model}
-\item{model}{Model used}
+\item{retrieved}{Tibble/data frame of retrieved chunks after filtering}
+\item{prompt}{Final grounded RAG prompt sent as the user/content prompt}
+\item{model}{Chat model used}
 }
 \description{
 Takes a user question, embeds it, retrieves relevant chunks from a vector store,
-constructs a prompt, and calls an LLM to generate an answer.
+constructs a grounded RAG prompt, and calls an LLM to generate an answer.
 }

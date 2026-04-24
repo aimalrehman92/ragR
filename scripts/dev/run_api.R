@@ -1,18 +1,27 @@
 # scripts/dev/run_api.R
+#
+# Purpose:
+#   Run the minimal ragR Plumber API for chatbot and RAGAS evaluation frontends.
+#
+# Usage, from project root:
+#   Rscript scripts/dev/run_api.R
 
 library(plumber)
+library(ragR)
 
-# ---------------- USER CHOICE -------------------------------------------------
-# Choose ONE:
-#   "approx" = lexical proxy metrics (fast, deterministic, no API calls)
-#   "llm"    = LLM-judged metrics (requires OPENAI_API_KEY; slower/cost)
-RAGAS_MODE <- "approx"
-options(ragR.ragas_mode = RAGAS_MODE)
-# -----------------------------------------------------------------------------
+# ---------------- USER SETTINGS ----------------------------------------------
+
+JUDGE_MODEL <- "gpt-4o-mini"
+
+HOST <- "0.0.0.0"
+PORT <- 8000L
+
+# ------------------------------------------------------------------------------
 
 api <- plumber::pr()
 
 # ---- CORS filter -------------------------------------------------------------
+
 api$filter("cors", function(req, res) {
   res$setHeader("Access-Control-Allow-Origin", "*")
   res$setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -25,9 +34,10 @@ api$filter("cors", function(req, res) {
 
   forward()
 })
-# -----------------------------------------------------------------------------
 
-# NOTE: /ingest removed (no ingestion API)
+# -----------------------------------------------------------------------------
+# NOTE: document ingestion is handled through scripts/dev/demo_ingest.R.
+
 api$handle("POST", "/chat",  source("inst/api/pr_chat.R")[[1]])
 api$handle("POST", "/clear", source("inst/api/pr_clear.R")[[1]])
 
@@ -35,18 +45,29 @@ api$handle("POST", "/clear_all", function(req, res) {
   ragR::api_clear_all_handler()
 })
 
-# RAGAS: per-QA metrics (mode comes from options())
+# RAGAS: per-QA LLM-scored metrics
 api$handle("GET", "/ragas", function(req, res) {
-  ragR::api_ragas_handler(mode = getOption("ragR.ragas_mode", "approx"))
+  ragR::api_ragas_handler(
+    judge_model = JUDGE_MODEL
+  )
 })
 
-# RAGAS: report (mode comes from options())
+# RAGAS: LLM-scored report
 api$handle("POST", "/ragas/report", function(req, res) {
-  ragR::api_ragas_report_handler(mode = getOption("ragR.ragas_mode", "approx"))
+  ragR::api_ragas_report_handler(
+    judge_model = JUDGE_MODEL
+  )
 })
 
+# RAGAS: clear QA log, QA metrics, and report files
 api$handle("POST", "/ragas/clear", function(req, res) {
   ragR::api_ragas_clear_handler()
 })
 
-plumber::pr_run(api, host = "0.0.0.0", port = 8000)
+cat("Starting ragR API...\n")
+cat("  Host        :", HOST, "\n")
+cat("  Port        :", PORT, "\n")
+cat("  Judge model :", JUDGE_MODEL, "\n")
+cat("  Docs        :", paste0("http://127.0.0.1:", PORT, "/__docs__/"), "\n\n")
+
+plumber::pr_run(api, host = HOST, port = PORT)

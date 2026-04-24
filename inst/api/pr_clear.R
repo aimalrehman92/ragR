@@ -1,4 +1,5 @@
-library(jsonlite)
+# inst/api/pr_clear.R
+
 library(ragR)
 
 #* Clear a vector store collection ("memory")
@@ -9,17 +10,22 @@ library(ragR)
 #* {
 #*   "collection": "demo_collection"
 #* }
+#*
 #* If omitted, "default" is used.
 #*
 #* @post /clear
 #* @serializer json
 function(req) {
   body <- NULL
-  if (nzchar(req$postBody)) {
-    body <- jsonlite::fromJSON(req$postBody, simplifyVector = FALSE)
+
+  if (!is.null(req$postBody) && nzchar(req$postBody)) {
+    body <- tryCatch(
+      jsonlite::fromJSON(req$postBody, simplifyVector = FALSE),
+      error = function(e) {
+        stop("Request body must be valid JSON.", call. = FALSE)
+      }
+    )
   }
 
-  result <- ragR::api_clear_handler(body)
-
-  return(result)
+  ragR::api_clear_handler(body)
 }

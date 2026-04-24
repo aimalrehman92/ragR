@@ -1,9 +1,16 @@
-#* @apiTitle ragR API
-#* @apiDescription RAG backend in R (OpenAI + Chroma)
+# inst/api/plumber.R
 
-# Get the directory where THIS file lives
+#* @apiTitle ragR API
+#* @apiDescription RAG and LLM-scored RAGAS backend in R
+
+# Get the directory where this file lives.
 api_dir <- dirname(sys.frame(1)$ofile)
 
-# source(file.path(api_dir, "pr_ingest.R"))  # removed: no ingestion endpoint
+# RAG chatbot endpoints
 source(file.path(api_dir, "pr_chat.R"))
+
+# Clear/reset endpoints
 source(file.path(api_dir, "pr_clear.R"))
+
+# RAGAS evaluation endpoints
+source(file.path(api_dir, "pr_ragas.R"))

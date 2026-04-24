@@ -1,27 +1,27 @@
-# scripts/dev/qa/run_eval_pipeline.R
+# scripts/dev/qa/run_eval_loop.R
 #
 # Purpose:
 #   End-to-end LLM-based RAGAS evaluation pipeline:
 #     1) Load QA log (db/qa_log.rds)
-#     2) Compute LLM-scored RAGAS metrics -> db/qa_metrics.rds
-#     3) Summarize metrics and write CSV
-#     4) Plot mean ± SD for LLM-scored metrics
+#     2) Compute LLM-scored RAGAS metrics for N iterations
+#     3) Save per-iteration metrics and summaries
+#     4) Save final metrics to db/qa_metrics.rds
+#     5) Plot mean ± SD for each iteration
 #
 # Usage (from project root):
-#   Rscript scripts/dev/qa/run_eval_pipeline.R
+#   Rscript scripts/dev/qa/run_eval_loop.R
 
 library(ragR)
 
 # ----------------------------- Config ----------------------------------------
 
 SEED <- 42L              # set to NULL to disable seed forwarding
+N    <- 3L               # number of iterations
 
 qa_log_path     <- "db/qa_log.rds"
 qa_metrics_path <- "db/qa_metrics.rds"
 
-output_dir         <- file.path("reports", "ragas")
-summary_actual_csv <- file.path(output_dir, "ragas_summary_actual.csv")
-plot_actual_png    <- file.path(output_dir, "ragas_means_actual.png")
+output_dir <- file.path("reports", "ragas")
 
 judge_model     <- "gpt-4o-mini"
 embedding_model <- "text-embedding-3-small"
@@ -135,7 +135,8 @@ cat("QA metrics path   :", qa_metrics_path, "\n")
 cat("Output dir        :", output_dir, "\n")
 cat("Judge model       :", judge_model, "\n")
 cat("Embedding model   :", embedding_model, "\n")
-cat("Seed              :", if (is.null(SEED)) "(disabled)" else as.character(SEED), "\n\n")
+cat("Seed              :", if (is.null(SEED)) "(disabled)" else as.character(SEED), "\n")
+cat("Iterations        :", N, "\n\n")
 
 # 1) Load QA log
 stop_if_missing(qa_log_path)
@@ -151,59 +152,93 @@ if (nrow(qa_log) == 0L) {
 # Ground truth is required in this evaluation setup.
 assert_has_ground_truth(qa_log)
 
-# 2) Compute LLM-scored metrics
-cat("Computing LLM-scored RAGAS metrics...\n")
-
-qa_metrics_actual <- compute_ragas_metrics_llm(
-  qa_log,
-  judge_model = judge_model,
-  seed = SEED,
-  embedding_model = embedding_model,
-  answer_relevance_strictness = as.integer(answer_relevance_strictness)
-)
-
-if (!tibble::is_tibble(qa_metrics_actual)) {
-  stop("Metric computation did not return a tibble.", call. = FALSE)
-}
-
-save_qa_metrics(qa_metrics_actual, qa_metrics_path)
-
-cat("Saved QA metrics:", qa_metrics_path, "\n")
-cat("Rows:", nrow(qa_metrics_actual), "\n\n")
-
-# 3) Summarize and save CSV
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-summary_actual <- summarize_ragas(qa_metrics_actual)
+all_metrics   <- vector("list", N)
+all_summaries <- vector("list", N)
 
-utils::write.csv(summary_actual, summary_actual_csv, row.names = FALSE)
+for (i in seq_len(N)) {
+  cat("============================================================\n")
+  cat(sprintf("ITERATION %d\n", i))
+  cat("============================================================\n")
 
-cat("Wrote summary CSV:", summary_actual_csv, "\n\n")
+  iter_seed <- if (is.null(SEED)) NULL else SEED + i - 1L
 
-# 4) Plot
+  iter_metrics_path <- file.path(output_dir, sprintf("qa_metrics_actual_iter_%02d.rds", i))
+  iter_summary_csv  <- file.path(output_dir, sprintf("ragas_summary_actual_iter_%02d.csv", i))
+  iter_plot_png     <- file.path(output_dir, sprintf("ragas_means_actual_iter_%02d.png", i))
+
+  cat("Computing LLM-scored RAGAS metrics...\n")
+  cat("  iteration seed:", if (is.null(iter_seed)) "(disabled)" else as.character(iter_seed), "\n\n")
+
+  qa_metrics_actual <- compute_ragas_metrics_llm(
+    qa_log,
+    judge_model = judge_model,
+    seed = iter_seed,
+    embedding_model = embedding_model,
+    answer_relevance_strictness = as.integer(answer_relevance_strictness)
+  )
+
+  if (!tibble::is_tibble(qa_metrics_actual)) {
+    stop("Metric computation did not return a tibble.", call. = FALSE)
+  }
+
+  save_qa_metrics(qa_metrics_actual, iter_metrics_path)
+
+  summary_actual <- summarize_ragas(qa_metrics_actual)
+  utils::write.csv(summary_actual, iter_summary_csv, row.names = FALSE)
+
+  plot_bar_means_sd(
+    summary_df  = summary_actual,
+    output_path = iter_plot_png,
+    title       = sprintf("RAGAS Metric Means (LLM-scored, Mean ± SD) - Iteration %d", i),
+    bar_col     = R_LOGO_BLUE
+  )
+
+  cat("Saved iteration metrics:", iter_metrics_path, "\n")
+  cat("Wrote iteration summary:", iter_summary_csv, "\n")
+  cat("Wrote iteration plot   :", iter_plot_png, "\n\n")
+
+  cat(sprintf("Summary: Iteration %d\n", i))
+  print(summary_actual)
+  cat("\n")
+
+  all_metrics[[i]]   <- qa_metrics_actual
+  all_summaries[[i]] <- summary_actual
+}
+
+# Save final iteration to the standard package path.
+save_qa_metrics(qa_metrics_actual, qa_metrics_path)
+
+final_summary_csv <- file.path(output_dir, "ragas_summary_actual.csv")
+final_plot_png    <- file.path(output_dir, "ragas_means_actual.png")
+
+utils::write.csv(summary_actual, final_summary_csv, row.names = FALSE)
+
 plot_bar_means_sd(
   summary_df  = summary_actual,
-  output_path = plot_actual_png,
+  output_path = final_plot_png,
   title       = "RAGAS Metric Means (LLM-scored, Mean ± SD)",
   bar_col     = R_LOGO_BLUE
 )
 
-cat("Wrote plot PNG:", plot_actual_png, "\n\n")
-
-cat("Summary:\n")
-print(summary_actual)
-
+cat("Final metrics saved to:", qa_metrics_path, "\n")
+cat("Final summary saved to:", final_summary_csv, "\n")
+cat("Final plot saved to   :", final_plot_png, "\n")
 cat("\nDone.\n")
 
 invisible(list(
   seed = SEED,
+  N = N,
   qa_log = qa_log,
-  qa_metrics = qa_metrics_actual,
-  summary = summary_actual,
+  final_qa_metrics = qa_metrics_actual,
+  all_metrics = all_metrics,
+  all_summaries = all_summaries,
   paths = list(
     qa_log_path = qa_log_path,
     qa_metrics_path = qa_metrics_path,
-    summary_csv = summary_actual_csv,
-    plot_png = plot_actual_png
+    output_dir = output_dir,
+    final_summary_csv = final_summary_csv,
+    final_plot_png = final_plot_png
   )
 ))

@@ -1,10 +1,12 @@
+# inst/api/pr_chat.R
+
 library(jsonlite)
 library(ragR)
 
 #* Ask a question using the RAG pipeline
 #*
-#* This endpoint sends a question to the RAG pipeline and returns
-#* the model's answer along with (optionally) retrieved context.
+#* This endpoint sends a question to the RAG pipeline, returns the model answer,
+#* and logs the Q/A interaction into the QA log.
 #*
 #* Example JSON body:
 #* {
@@ -16,11 +18,16 @@ library(ragR)
 #* @post /chat
 #* @serializer json
 function(req) {
-  # Parse JSON body into an R list
-  body <- jsonlite::fromJSON(req$postBody, simplifyVector = FALSE)
+  if (is.null(req$postBody) || !nzchar(req$postBody)) {
+    stop("Request body must be non-empty JSON.", call. = FALSE)
+  }
 
-  # Delegate to the package-level API handler
-  result <- ragR::api_chat_handler(body)
+  body <- tryCatch(
+    jsonlite::fromJSON(req$postBody, simplifyVector = FALSE),
+    error = function(e) {
+      stop("Request body must be valid JSON.", call. = FALSE)
+    }
+  )
 
-  return(result)
+  ragR::api_chat_handler(body)
 }

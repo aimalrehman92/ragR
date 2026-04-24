@@ -18,8 +18,11 @@ generate_ragas_report_llm(
 
 \item{output_dir}{Output directory for CSV/PNG (default: "reports/ragas").}
 
-\item{judge_model}{Judge model used when \code{mode="llm"} (default: "gpt-4o-mini").}
+\item{judge_model}{Judge model used for LLM scoring (default: "gpt-4o-mini").}
+}
+\value{
+A list with: status, n_qa, qa_metrics_path, summary_csv_path, plot_path.
 }
 \description{
-Generate RAGAS report using LLM scoring
+This is an explicit alias for \code{\link[=generate_ragas_report]{generate_ragas_report()}}.
 }

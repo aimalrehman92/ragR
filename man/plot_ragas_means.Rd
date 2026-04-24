@@ -7,7 +7,7 @@
 plot_ragas_means(summary_df, output_path, width = 1200, height = 700)
 }
 \arguments{
-\item{summary_df}{Output of \code{summarize_ragas()}.}
+\item{summary_df}{Output of \code{\link[=summarize_ragas]{summarize_ragas()}}.}
 
 \item{output_path}{Where to save the PNG.}
 
@@ -17,5 +17,5 @@ plot_ragas_means(summary_df, output_path, width = 1200, height = 700)
 Invisibly, \code{output_path}.
 }
 \description{
-Creates a simple, publication-friendly bar chart of mean metric values.
+Creates a simple bar chart of mean metric values.
 }

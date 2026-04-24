@@ -7,7 +7,7 @@
 vectorstore_clear_all()
 }
 \value{
-Invisibly, TRUE
+Invisibly, TRUE.
 }
 \description{
 Completely wipes the vector store by replacing it with an empty tibble.

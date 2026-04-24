@@ -2,11 +2,10 @@
 % Please edit documentation in R/ragas_metrics.R
 \name{compute_ragas_metrics}
 \alias{compute_ragas_metrics}
-\title{Compute RAGAS metrics (mode switch)}
+\title{Compute RAGAS metrics}
 \usage{
 compute_ragas_metrics(
   qa_log,
-  mode = NULL,
   judge_model = "gpt-4o-mini",
   seed = NULL,
   embedding_model = "text-embedding-3-small",
@@ -16,22 +15,18 @@ compute_ragas_metrics(
 \arguments{
 \item{qa_log}{QA log tibble.}
 
-\item{mode}{One of \code{"approx"} or \code{"llm"}. If NULL, uses option
-\code{ragR.ragas_mode} (defaults to \code{"approx"}).}
+\item{judge_model}{Judge model for LLM-scored metrics.}
 
-\item{judge_model}{Judge model for \code{mode="llm"} (default: "gpt-4o-mini").}
+\item{seed}{Optional integer forwarded to LLM-scored metrics.}
 
-\item{seed}{Optional integer. Forwarded to LLM-scored metrics when \code{mode="llm"}.}
-
-\item{embedding_model}{Embedding model for answer relevance when \code{mode="llm"}.}
+\item{embedding_model}{Embedding model for answer relevance.}
 
 \item{answer_relevance_strictness}{Number of reverse questions generated for
-answer relevance when \code{mode="llm"}.}
+answer relevance.}
 }
 \value{
 A metrics tibble.
 }
 \description{
-Convenience wrapper to compute either approximate proxy metrics or
-LLM-scored metrics.
+Convenience wrapper for computing LLM-scored RAGAS-style metrics.
 }

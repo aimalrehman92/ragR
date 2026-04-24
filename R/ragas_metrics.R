@@ -20,185 +20,157 @@ qa_metrics_empty <- function() {
   )
 }
 
-# ---- APPROX / PROXY METRICS --------------------------------------------------
-
-#' Compute RAGAS-style metrics (deterministic, reference-based)
-#'
-#' Computes deterministic lexical proxies using token overlap / Jaccard.
-#' This mode assumes a reference (ground-truth) answer is available for each
-#' interaction via the `answer_reference` column in the QA log.
-#'
-#' @param qa_log A tibble created and populated by [log_rag_interaction()].
-#'
-#' @return A tibble with one row per `qa_id` and metric columns.
-#' @export
-compute_ragas_metrics_approx <- function(qa_log) {
-  if (is.null(qa_log) || nrow(qa_log) == 0L) {
-    return(qa_metrics_empty())
-  }
-
-  required_cols <- c("qa_id", "question", "answer_model", "answer_reference", "retrieved_texts")
-  missing_cols <- setdiff(required_cols, names(qa_log))
-  if (length(missing_cols) > 0L) {
-    stop(
-      "qa_log is missing required columns: ",
-      paste(missing_cols, collapse = ", "),
-      call. = FALSE
-    )
-  }
-
-  tokenize <- function(x) {
-    if (is.null(x) || is.na(x) || !nzchar(x)) return(character(0L))
-    toks <- unlist(strsplit(tolower(x), "[^[:alnum:]]+"))
-    toks[nzchar(toks)]
-  }
-
-  metric_rows <- lapply(seq_len(nrow(qa_log)), function(i) {
-    qa_id  <- qa_log$qa_id[i]
-    q_text <- qa_log$question[i]
-    a_text <- qa_log$answer_model[i]
-    g_text <- qa_log$answer_reference[i]
-
-    ctx_vec <- character(0L)
-    if (!is.null(qa_log$retrieved_texts) && length(qa_log$retrieved_texts) >= i) {
-      ctx_vec <- unlist(qa_log$retrieved_texts[[i]])
-    }
-    ctx_text <- paste(ctx_vec, collapse = " ")
-
-    q_tokens <- unique(tokenize(q_text))
-    a_tokens <- unique(tokenize(a_text))
-    g_tokens <- unique(tokenize(g_text))
-    c_tokens <- unique(tokenize(ctx_text))
-
-    if (length(c_tokens) == 0L || length(g_tokens) == 0L) {
-      context_precision <- 0
-    } else {
-      context_precision <- length(intersect(c_tokens, g_tokens)) / length(c_tokens)
-    }
-
-    if (length(g_tokens) == 0L || length(c_tokens) == 0L) {
-      context_recall <- 0
-    } else {
-      context_recall <- length(intersect(c_tokens, g_tokens)) / length(g_tokens)
-    }
-
-    if (length(a_tokens) == 0L || length(c_tokens) == 0L) {
-      faithfulness <- 0
-    } else {
-      faithfulness <- length(intersect(a_tokens, c_tokens)) / length(a_tokens)
-    }
-
-    if (length(a_tokens) == 0L && length(g_tokens) == 0L) {
-      answer_relevance <- 0
-    } else {
-      inter_ag <- length(intersect(a_tokens, g_tokens))
-      union_ag <- length(union(a_tokens, g_tokens))
-      answer_relevance <- if (union_ag == 0L) 0 else inter_ag / union_ag
-    }
-
-    ragas_overall <- mean(c(context_precision, context_recall, answer_relevance, faithfulness))
-
-    tibble::tibble(
-      qa_id             = as.integer(qa_id),
-      context_precision = context_precision,
-      context_recall    = context_recall,
-      answer_relevance  = answer_relevance,
-      faithfulness      = faithfulness,
-      ragas_overall     = ragas_overall
-    )
-  })
-
-  dplyr::bind_rows(metric_rows)
-}
-
 # ---- LLM-BASED STRUCTURED METRICS --------------------------------------------
 
 # Internal: compact null-coalescing helper
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 extract_json_block <- function(text) {
-
-  # Step 1: handle ```json blocks correctly
-  md_idx <- regexpr("```json", text, fixed = TRUE)
-  if (md_idx != -1) {
-    text <- substr(text, md_idx + 7, nchar(text))
-  }
-
-  # remove trailing ```
-  text <- sub("```$", "", text)
-
-  # Step 2: find first { or [
-  left_bracket <- regexpr("\\[", text)
-  left_brace   <- regexpr("\\{", text)
-
-  candidates <- c(left_bracket, left_brace)
-  candidates <- candidates[candidates > 0]
-
-  if (length(candidates) == 0) {
+  if (is.null(text) || !is.character(text) || length(text) != 1L) {
     return(text)
   }
 
-  start_idx <- min(candidates)
-  open_char <- substr(text, start_idx, start_idx)
-  close_char <- ifelse(open_char == "[", "]", "}")
+  md_idx <- regexpr("```json", text, fixed = TRUE)[1]
+  if (!is.na(md_idx) && md_idx > 0L) {
+    text <- substr(text, md_idx, nchar(text))
+  }
 
-  # Step 3: bracket matching
-  count <- 0
+  chars <- strsplit(text, "", fixed = TRUE)[[1]]
 
-  for (i in seq(start_idx, nchar(text))) {
-    char <- substr(text, i, i)
+  left_bracket <- match("[", chars)
+  left_brace   <- match("{", chars)
 
-    if (char == open_char) count <- count + 1
-    if (char == close_char) count <- count - 1
+  if (!is.na(left_bracket) && !is.na(left_brace)) {
+    start_idx <- min(left_bracket, left_brace)
+  } else if (!is.na(left_bracket)) {
+    start_idx <- left_bracket
+  } else if (!is.na(left_brace)) {
+    start_idx <- left_brace
+  } else {
+    return(text)
+  }
 
-    if (count == 0) {
-      return(substr(text, start_idx, i))
+  stack <- character(0)
+  in_string <- FALSE
+  escaped <- FALSE
+
+  for (i in seq.int(start_idx, length(chars))) {
+    ch <- chars[[i]]
+
+    if (in_string) {
+      if (escaped) {
+        escaped <- FALSE
+      } else if (identical(ch, "\\")) {
+        escaped <- TRUE
+      } else if (identical(ch, "\"")) {
+        in_string <- FALSE
+      }
+      next
+    }
+
+    if (identical(ch, "\"")) {
+      in_string <- TRUE
+    } else if (ch %in% c("{", "[")) {
+      stack <- c(stack, ch)
+    } else if (ch %in% c("}", "]")) {
+      if (length(stack) == 0L) {
+        return(text)
+      }
+
+      last <- stack[[length(stack)]]
+      ok <- (identical(last, "{") && identical(ch, "}")) ||
+        (identical(last, "[") && identical(ch, "]"))
+
+      if (!ok) {
+        return(text)
+      }
+
+      stack <- stack[-length(stack)]
+
+      if (length(stack) == 0L) {
+        return(paste(chars[start_idx:i], collapse = ""))
+      }
     }
   }
 
-  return(text)
+  text
 }
 
-# create a log file path (once)
-log_file <- "debug_llm_outputs.txt"
+ragas_generate_json <- function(
+  prompt,
+  model = "gpt-4o-mini",
+  seed = NULL,
+  temperature = 0,
+  max_retries = 1L
+) {
+  raw <- generate_openai_chat(
+    prompt = prompt,
+    model = model,
+    temperature = temperature,
+    seed = seed
+  )
 
-ragas_generate_json <- function(prompt, model = "gpt-4o-mini", seed = NULL, temperature = 0, max_retries = 3L) {
+  json_str <- extract_json_block(raw)
+  parsed <- tryCatch(
+    jsonlite::fromJSON(json_str, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
 
-  last_raw <- NULL
+  if (!is.null(parsed)) {
+    return(parsed)
+  }
 
-  for (attempt in seq_len(max_retries)) {
-
-    raw <- generate_openai_chat(
-      prompt = prompt,
-      model = model,
-      temperature = temperature,
-      seed = seed
+  if (max_retries <= 0L) {
+    stop(
+      "Failed to parse JSON. Last response:\n",
+      substr(raw %||% "", 1, 1000),
+      call. = FALSE
     )
+  }
 
-    last_raw <- raw
+  fix_prompt <- ragas_fix_output_format_prompt_string(
+    output_string = raw,
+    prompt_value = prompt
+  )
 
-    # 🔥 Step 1: extract JSON STRING (not parsed)
-    json_str <- extract_json_block(raw)
+  fixed_raw <- generate_openai_chat(
+    prompt = fix_prompt,
+    model = model,
+    temperature = temperature,
+    seed = seed
+  )
 
-    # 🔥 Step 2: parse JSON safely
-    parsed <- tryCatch(
-      jsonlite::fromJSON(json_str, simplifyVector = FALSE),
-      error = function(e) NULL
+  fixed_outer_json <- extract_json_block(fixed_raw)
+  fixed_outer <- tryCatch(
+    jsonlite::fromJSON(fixed_outer_json, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+
+  fixed_text <- fixed_outer$text %||% NULL
+
+  if (is.null(fixed_text) || !is.character(fixed_text) || length(fixed_text) != 1L) {
+    stop(
+      "Failed to parse JSON after FixOutputFormat. Last response:\n",
+      substr(fixed_raw %||% "", 1, 1000),
+      call. = FALSE
     )
+  }
 
-    # 🔥 Step 3: only accept valid structured output
-    if (!is.null(parsed)) {
-      return(parsed)
-    }
+  parsed_fixed <- tryCatch(
+    jsonlite::fromJSON(fixed_text, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+
+  if (!is.null(parsed_fixed)) {
+    return(parsed_fixed)
   }
 
   stop(
-    "Failed to parse JSON. Last response:\n",
-    substr(last_raw %||% "", 1, 1000),
+    "Failed to parse repaired JSON. Last repaired response:\n",
+    substr(fixed_text %||% "", 1, 1000),
     call. = FALSE
   )
 }
-
 
 # Internal: build a PydanticPrompt-style string from instruction/schema/examples/input
 ragas_prompt_string <- function(instruction, output_schema, input_data, examples = list()) {
@@ -228,6 +200,24 @@ ragas_prompt_string <- function(instruction, output_schema, input_data, examples
   )
 }
 
+ragas_fix_output_format_prompt_string <- function(output_string, prompt_value) {
+  instruction <- "The output string did not satisfy the constraints given in the prompt. Fix the output string and return it."
+
+  schema <- json_schema_object(list(
+    text = list(type = "string")
+  ))
+
+  ragas_prompt_string(
+    instruction = instruction,
+    output_schema = schema,
+    input_data = list(
+      output_string = output_string,
+      prompt_value = prompt_value
+    ),
+    examples = list()
+  )
+}
+
 # Internal: JSON schema helper for repeated prompt definitions
 json_schema_object <- function(properties, required = names(properties)) {
   list(
@@ -239,14 +229,6 @@ json_schema_object <- function(properties, required = names(properties)) {
 
 json_schema_array <- function(item_schema) {
   list(type = "array", items = item_schema)
-}
-
-# Internal: minimal sentence splitter used for context recall fallback/cleanup
-split_sentences_basic <- function(text) {
-  if (is.null(text) || !nzchar(trimws(text))) return(character(0))
-  pieces <- unlist(strsplit(gsub("\\s+", " ", text), "(?<=[.!?])\\s+", perl = TRUE))
-  pieces <- trimws(pieces)
-  pieces[nzchar(pieces)]
 }
 
 # Internal: cosine similarity helpers for answer relevance
@@ -286,7 +268,14 @@ ragas_embed_texts <- function(texts, model = "text-embedding-3-small") {
 }
 
 # Internal: generate multiple structured outputs, matching RAGAS generate_multiple behavior
-ragas_generate_multiple <- function(prompt, n, model = "gpt-4o-mini", seed = NULL, temperature = 0, max_retries = 3L) {
+ragas_generate_multiple <- function(
+  prompt,
+  n,
+  model = "gpt-4o-mini",
+  seed = NULL,
+  temperature = 0,
+  max_retries = 3L
+) {
   out <- vector("list", n)
   for (i in seq_len(n)) {
     out[[i]] <- ragas_generate_json(
@@ -313,23 +302,23 @@ ensemble_binary_verdict <- function(parsed_list, field = "verdict") {
 
 # ---- Faithfulness -------------------------------------------------------------
 
-faithfulness_statement_generator_prompt <- function(question, answer, model = "gpt-4o-mini", seed = NULL) {
-
+faithfulness_statement_generator_prompt <- function(
+  question,
+  answer,
+  model = "gpt-4o-mini",
+  seed = NULL
+) {
   instruction <- paste(
     "Given a question and an answer, analyze the complexity of each sentence in the answer.",
     "Break down each sentence into one or more fully understandable statements.",
     "Ensure that no pronouns are used in any statement.",
-    "Do NOT simplify statements.",
-    "Do NOT remove nuanced or partial claims.",
-    "Do NOT skip any information present in the answer.",
-    "Each statement must reflect the original meaning exactly.",
     "Format the outputs in JSON."
   )
 
   schema <- json_schema_object(list(
     statements = list(
       type = "array",
-      items = list(type = "string")
+      items = list(type = "string", description = "The generated statements")
     )
   ))
 
@@ -344,7 +333,7 @@ faithfulness_statement_generator_prompt <- function(question, answer, model = "g
     output = list(
       statements = list(
         "Albert Einstein was a German-born theoretical physicist.",
-        "Albert Einstein was widely acknowledged to be one of the greatest and most influential physicists of all time.",
+        "Albert Einstein is recognized as one of the greatest and most influential physicists of all time.",
         "Albert Einstein was best known for developing the theory of relativity.",
         "Albert Einstein also made important contributions to the development of the theory of quantum mechanics."
       )
@@ -358,31 +347,40 @@ faithfulness_statement_generator_prompt <- function(question, answer, model = "g
     examples = examples
   )
 
-  parsed <- ragas_generate_json(prompt, model = model, seed = seed)
+  parsed <- ragas_generate_json(
+    prompt,
+    model = model,
+    seed = seed,
+    temperature = 0,
+    max_retries = 1L
+  )
 
   if (is.null(parsed) || is.null(parsed$statements)) {
     return(character(0))
   }
 
   statements <- parsed$statements
-  statements <- unname(as.character(unlist(statements)))
-  statements <- statements[nzchar(statements)]
+  statements <- unname(as.character(unlist(statements, use.names = FALSE)))
+  statements <- statements[nzchar(trimws(statements))]
 
-  return(statements)
+  statements
 }
 
-
-faithfulness_nli_prompt <- function(contexts, statements, model = "gpt-4o-mini", seed = NULL) {
-
+faithfulness_nli_prompt <- function(
+  contexts,
+  statements,
+  model = "gpt-4o-mini",
+  seed = NULL
+) {
   instruction <- paste(
     "Your task is to judge the faithfulness of a series of statements based on a given context.",
     "For each statement you must return verdict as 1 if the statement can be directly inferred based on the context or 0 if the statement can not be directly inferred based on the context."
   )
 
   statement_schema <- json_schema_object(list(
-    statement = list(type = "string"),
-    reason = list(type = "string"),
-    verdict = list(type = "integer")
+    statement = list(type = "string", description = "the original statement, word-by-word"),
+    reason = list(type = "string", description = "the reason of the verdict"),
+    verdict = list(type = "integer", description = "the verdict(0/1) of the faithfulness.")
   ))
 
   schema <- json_schema_object(list(
@@ -393,23 +391,53 @@ faithfulness_nli_prompt <- function(contexts, statements, model = "gpt-4o-mini",
     list(
       input = list(
         context = paste(
-          "John is a student at XYZ University. He is pursuing a degree in Computer Science.",
-          "He is enrolled in Data Structures, Algorithms, and Database Management.",
-          "John studies extensively and works late in the library."
+          "John is a student at XYZ University. He is pursuing a degree in Computer Science. He is enrolled in several courses this semester, including Data Structures, Algorithms, and Database Management.",
+          "John is a diligent student and spends a significant amount of time studying and completing assignments. He often stays late in the library to work on his projects."
         ),
         statements = list(
           "John is majoring in Biology.",
-          "John is taking Artificial Intelligence.",
-          "John studies extensively.",
+          "John is taking a course on Artificial Intelligence.",
+          "John is a dedicated student.",
           "John has a part-time job."
         )
       ),
       output = list(
         statements = list(
-          list(statement = "John is majoring in Biology.", reason = "Not in context.", verdict = 0),
-          list(statement = "John is taking Artificial Intelligence.", reason = "Not in context.", verdict = 0),
-          list(statement = "John studies extensively.", reason = "Explicitly stated.", verdict = 1),
-          list(statement = "John has a part-time job.", reason = "Not in context.", verdict = 0)
+          list(
+            statement = "John is majoring in Biology.",
+            reason = "John's major is explicitly mentioned as Computer Science. There is no information suggesting he is majoring in Biology.",
+            verdict = 0
+          ),
+          list(
+            statement = "John is taking a course on Artificial Intelligence.",
+            reason = "The context mentions the courses John is currently enrolled in, and Artificial Intelligence is not mentioned. Therefore, it cannot be deduced that John is taking a course on AI.",
+            verdict = 0
+          ),
+          list(
+            statement = "John is a dedicated student.",
+            reason = "The context states that he spends a significant amount of time studying and completing assignments. Additionally, it mentions that he often stays late in the library to work on his projects, which implies dedication.",
+            verdict = 1
+          ),
+          list(
+            statement = "John has a part-time job.",
+            reason = "There is no information given in the context about John having a part-time job.",
+            verdict = 0
+          )
+        )
+      )
+    ),
+    list(
+      input = list(
+        context = "Photosynthesis is a process used by plants, algae, and certain bacteria to convert light energy into chemical energy.",
+        statements = list("Albert Einstein was a genius.")
+      ),
+      output = list(
+        statements = list(
+          list(
+            statement = "Albert Einstein was a genius.",
+            reason = "The context and statement are unrelated",
+            verdict = 0
+          )
         )
       )
     )
@@ -425,7 +453,13 @@ faithfulness_nli_prompt <- function(contexts, statements, model = "gpt-4o-mini",
     examples = examples
   )
 
-  parsed <- ragas_generate_json(prompt, model = model, seed = seed)
+  parsed <- ragas_generate_json(
+    prompt,
+    model = model,
+    seed = seed,
+    temperature = 0,
+    max_retries = 1L
+  )
 
   if (is.null(parsed) || is.null(parsed$statements)) {
     return(list())
@@ -440,9 +474,13 @@ faithfulness_nli_prompt <- function(contexts, statements, model = "gpt-4o-mini",
   ))
 }
 
-compute_faithfulness_ragas <- function(question, answer, contexts, model = "gpt-4o-mini", seed = NULL) {
-
-  # Step 1: generate statements
+compute_faithfulness_ragas <- function(
+  question,
+  answer,
+  contexts,
+  model = "gpt-4o-mini",
+  seed = NULL
+) {
   statements <- faithfulness_statement_generator_prompt(
     question = question,
     answer = answer,
@@ -451,43 +489,39 @@ compute_faithfulness_ragas <- function(question, answer, contexts, model = "gpt-
   )
 
   if (length(statements) == 0L) {
-    return(NA_real_)
+    return(NaN)
   }
 
-  # Step 2: get NLI outputs
   verdicts <- faithfulness_nli_prompt(
     contexts = contexts,
     statements = statements,
     model = model,
-    seed = if (is.null(seed)) NULL else seed + 1000L
+    seed = seed
   )
 
   if (length(verdicts) == 0L) {
-    return(NA_real_)
+    return(NaN)
   }
-
-  # 🔥 CRITICAL: mimic Python exactly
-  # denominator = length of returned verdict objects
 
   faithful_count <- sum(vapply(verdicts, function(x) {
-    val <- suppressWarnings(as.numeric(x$verdict))
-    if (is.na(val)) return(0)
-    if (val == 1) return(1)
-    0
-  }, numeric(1)))
+    val <- suppressWarnings(as.integer(x$verdict))
+    if (is.na(val)) return(0L)
+    if (val == 1L) return(1L)
+    0L
+  }, integer(1)))
 
-  num_statements <- length(verdicts)
-
-  if (num_statements == 0L) {
-    return(NA_real_)
-  }
-
-  faithful_count / num_statements
+  faithful_count / length(verdicts)
 }
 
 # ---- Context Precision --------------------------------------------------------
 
-context_precision_single_verification <- function(question, context, answer, model = "gpt-4o-mini", seed = NULL) {
+context_precision_single_verification <- function(
+  question,
+  context,
+  answer,
+  model = "gpt-4o-mini",
+  seed = NULL
+) {
   instruction <- paste(
     'Given question, answer and context verify if the context was useful in arriving at the given answer.',
     'Give verdict as "1" if useful and "0" if not with json output.'
@@ -553,21 +587,26 @@ context_precision_single_verification <- function(question, context, answer, mod
     examples = examples
   )
 
-  # Python uses generate_multiple and ensembler.from_discrete over repeated verdicts.
   parsed_list <- ragas_generate_multiple(prompt, n = 3L, model = model, seed = seed)
   verdict <- ensemble_binary_verdict(parsed_list, field = "verdict")
+
   list(
     reason = as.character(parsed_list[[1]]$reason %||% ""),
     verdict = verdict
   )
 }
 
-compute_context_precision_ragas <- function(question, answer_or_reference, contexts, model = "gpt-4o-mini", seed = NULL) {
+compute_context_precision_ragas <- function(
+  question,
+  answer_or_reference,
+  contexts,
+  model = "gpt-4o-mini",
+  seed = NULL
+) {
   if (is.null(contexts) || length(contexts) == 0L) {
     return(NA_real_)
   }
 
-  # Step 1: Get verification results per context
   verifications <- lapply(seq_along(contexts), function(i) {
     context_precision_single_verification(
       question = question,
@@ -578,7 +617,6 @@ compute_context_precision_ragas <- function(question, answer_or_reference, conte
     )
   })
 
-  # Step 2: Extract verdicts safely
   verdicts <- vapply(verifications, function(x) {
     if (is.null(x) || is.null(x$verdict) || is.na(x$verdict)) {
       return(0)
@@ -586,12 +624,10 @@ compute_context_precision_ragas <- function(question, answer_or_reference, conte
     as.numeric(x$verdict)
   }, numeric(1))
 
-  # Step 3: Handle invalid case
   if (length(verdicts) == 0 || all(is.na(verdicts))) {
     return(NA_real_)
   }
 
-  # Step 4: Compute Average Precision (RAGAS style)
   relevant_positions <- which(verdicts == 1)
 
   if (length(relevant_positions) == 0L) {
@@ -605,10 +641,15 @@ compute_context_precision_ragas <- function(question, answer_or_reference, conte
   mean(precision_at_k[relevant_positions])
 }
 
-
 # ---- Context Recall -----------------------------------------------------------
 
-context_recall_classification_prompt <- function(question, context, answer, model = "gpt-4o-mini", seed = NULL) {
+context_recall_classification_prompt <- function(
+  question,
+  context,
+  answer,
+  model = "gpt-4o-mini",
+  seed = NULL
+) {
   instruction <- paste(
     "Given a context, and an answer, analyze each sentence in the answer and classify if the sentence can be attributed to the given context or not.",
     "Use only 'Yes' (1) or 'No' (0) as a binary classification. Output json with reason."
@@ -619,7 +660,10 @@ context_recall_classification_prompt <- function(question, context, answer, mode
     reason = list(type = "string"),
     attributed = list(type = "integer")
   ))
-  schema <- json_schema_object(list(classifications = json_schema_array(item_schema)))
+
+  schema <- json_schema_object(list(
+    classifications = json_schema_array(item_schema)
+  ))
 
   examples <- list(
     list(
@@ -639,9 +683,21 @@ context_recall_classification_prompt <- function(question, context, answer, mode
       ),
       output = list(
         classifications = list(
-          list(statement = "Albert Einstein, born on 14 March 1879, was a German-born theoretical physicist, widely held to be one of the greatest and most influential scientists of all time.", reason = "This sentence is directly supported by the context.", attributed = 1),
-          list(statement = "He received the 1921 Nobel Prize in Physics for his services to theoretical physics.", reason = "This sentence is directly supported by the context.", attributed = 1),
-          list(statement = "He published 4 papers in 1905.", reason = "The context does not mention this claim.", attributed = 0)
+          list(
+            statement = "Albert Einstein, born on 14 March 1879, was a German-born theoretical physicist, widely held to be one of the greatest and most influential scientists of all time.",
+            reason = "This sentence is directly supported by the context.",
+            attributed = 1
+          ),
+          list(
+            statement = "He received the 1921 Nobel Prize in Physics for his services to theoretical physics.",
+            reason = "This sentence is directly supported by the context.",
+            attributed = 1
+          ),
+          list(
+            statement = "He published 4 papers in 1905.",
+            reason = "The context does not mention this claim.",
+            attributed = 0
+          )
         )
       )
     )
@@ -656,6 +712,7 @@ context_recall_classification_prompt <- function(question, context, answer, mode
 
   parsed <- ragas_generate_json(prompt, model = model, seed = seed)
   out <- parsed$classifications %||% list()
+
   lapply(out, function(x) list(
     statement = as.character(x$statement %||% ""),
     reason = as.character(x$reason %||% ""),
@@ -689,19 +746,22 @@ compute_context_recall_ragas <- function(
     suppressWarnings(as.numeric(x$attributed))
   }, numeric(1))
 
-  # 🔥 Keep only valid parsed classifications
   valid_vals <- vals[!is.na(vals)]
 
   if (length(valid_vals) == 0L) {
     return(NA_real_)
   }
-  mean(valid_vals)
 
+  mean(valid_vals)
 }
 
 # ---- Answer Relevance ---------------------------------------------------------
 
-answer_relevance_question_generation_prompt <- function(response, model = "gpt-4o-mini", seed = NULL) {
+answer_relevance_question_generation_prompt <- function(
+  response,
+  model = "gpt-4o-mini",
+  seed = NULL
+) {
   instruction <- paste(
     "Generate a question for the given answer and identify if the answer is noncommittal.",
     "A noncommittal answer is one that is evasive, vague, or ambiguous.",
@@ -786,18 +846,15 @@ compute_answer_relevance_ragas <- function(
     return(0)
   }
 
-  # 🔥 Python behavior: no filtering, no cleaning
   gen_questions <- vapply(prompt_outputs, function(x) {
     as.character(x$question %||% "")
   }, character(1))
 
-  # 🔥 Embed question separately
   q_vec <- get_openai_embeddings(
     texts = question,
     model = embedding_model
   )[1, ]
 
-  # 🔥 Embed generated questions one-by-one
   gen_vecs <- lapply(gen_questions, function(q) {
     get_openai_embeddings(
       texts = q,
@@ -833,7 +890,7 @@ compute_answer_relevance_ragas <- function(
 #'   package environment.
 #'
 #' @param qa_log A tibble created and populated by [log_rag_interaction()].
-#' @param judge_model Character scalar; judge model name (default: "gpt-4o-mini").
+#' @param judge_model Character scalar; judge model name.
 #' @param seed Optional integer forwarded to judge model calls.
 #' @param embedding_model Embedding model name used for answer relevance.
 #' @param answer_relevance_strictness Number of generated reverse questions for
@@ -865,21 +922,24 @@ compute_ragas_metrics_llm <- function(
   has_gt <- "answer_reference" %in% names(qa_log)
 
   rows <- lapply(seq_len(nrow(qa_log)), function(i) {
-    qa_id  <- qa_log$qa_id[i]
-    q      <- qa_log$question[i]
-    a      <- qa_log$answer_model[i]
-    ctx    <- unlist(qa_log$retrieved_texts[[i]])
-    if (length(ctx) == 0L) ctx <- character(0)
+    qa_id <- qa_log$qa_id[i]
+    q     <- qa_log$question[i]
+    a     <- qa_log$answer_model[i]
+    ctx   <- unlist(qa_log$retrieved_texts[[i]])
+
+    if (length(ctx) == 0L) {
+      ctx <- character(0)
+    }
 
     gt <- NULL
     if (has_gt) {
       gt_val <- qa_log$answer_reference[i]
-      if (!is.na(gt_val) && nzchar(gt_val)) gt <- gt_val
+      if (!is.na(gt_val) && nzchar(gt_val)) {
+        gt <- gt_val
+      }
     }
-    cp_answer <- gt %||% a
 
-    cat("\n==============================\n")
-    cat("QUESTION:\n", q, "\n\n")
+    cp_answer <- gt %||% a
 
     cp <- tryCatch(
       compute_context_precision_ragas(
@@ -891,7 +951,6 @@ compute_ragas_metrics_llm <- function(
       ),
       error = function(e) NA_real_
     )
-    cat("CP:", cp, "\n")
 
     cr <- tryCatch(
       compute_context_recall_ragas(
@@ -903,7 +962,6 @@ compute_ragas_metrics_llm <- function(
       ),
       error = function(e) NA_real_
     )
-    cat("CR:", cr, "\n")
 
     ar <- tryCatch(
       compute_answer_relevance_ragas(
@@ -916,7 +974,6 @@ compute_ragas_metrics_llm <- function(
       ),
       error = function(e) NA_real_
     )
-    cat("AR:", ar, "\n")
 
     fa <- tryCatch(
       compute_faithfulness_ragas(
@@ -928,10 +985,11 @@ compute_ragas_metrics_llm <- function(
       ),
       error = function(e) NA_real_
     )
-    cat("FA:", fa, "\n")
 
     overall <- mean(c(cp, cr, ar, fa), na.rm = TRUE)
-    if (is.nan(overall)) overall <- NA_real_
+    if (is.nan(overall)) {
+      overall <- NA_real_
+    }
 
     tibble::tibble(
       qa_id             = as.integer(qa_id),
@@ -946,46 +1004,33 @@ compute_ragas_metrics_llm <- function(
   dplyr::bind_rows(rows)
 }
 
-# ---- WRAPPER (MODE SWITCH) ---------------------------------------------------
+# ---- WRAPPER -----------------------------------------------------------------
 
-#' Compute RAGAS metrics (mode switch)
+#' Compute RAGAS metrics
 #'
-#' Convenience wrapper to compute either approximate proxy metrics or
-#' LLM-scored metrics.
+#' Convenience wrapper for computing LLM-scored RAGAS-style metrics.
 #'
 #' @param qa_log QA log tibble.
-#' @param mode One of `"approx"` or `"llm"`. If NULL, uses option
-#'   `ragR.ragas_mode` (defaults to `"approx"`).
-#' @param judge_model Judge model for `mode="llm"` (default: "gpt-4o-mini").
-#' @param seed Optional integer. Forwarded to LLM-scored metrics when `mode="llm"`.
-#' @param embedding_model Embedding model for answer relevance when `mode="llm"`.
+#' @param judge_model Judge model for LLM-scored metrics.
+#' @param seed Optional integer forwarded to LLM-scored metrics.
+#' @param embedding_model Embedding model for answer relevance.
 #' @param answer_relevance_strictness Number of reverse questions generated for
-#'   answer relevance when `mode="llm"`.
+#'   answer relevance.
 #'
 #' @return A metrics tibble.
 #' @export
 compute_ragas_metrics <- function(
   qa_log,
-  mode = NULL,
   judge_model = "gpt-4o-mini",
   seed = NULL,
   embedding_model = "text-embedding-3-small",
   answer_relevance_strictness = 3L
 ) {
-  if (is.null(mode)) {
-    mode <- getOption("ragR.ragas_mode", "approx")
-  }
-  mode <- match.arg(mode, choices = c("approx", "llm"))
-
-  if (identical(mode, "approx")) {
-    compute_ragas_metrics_approx(qa_log)
-  } else {
-    compute_ragas_metrics_llm(
-      qa_log,
-      judge_model = judge_model,
-      seed = seed,
-      embedding_model = embedding_model,
-      answer_relevance_strictness = answer_relevance_strictness
-    )
-  }
+  compute_ragas_metrics_llm(
+    qa_log,
+    judge_model = judge_model,
+    seed = seed,
+    embedding_model = embedding_model,
+    answer_relevance_strictness = answer_relevance_strictness
+  )
 }

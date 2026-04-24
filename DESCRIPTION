@@ -1,12 +1,15 @@
 Package: ragR
 Title: Retrieval-Augmented Generation and RAG Evaluation Tools in R
 Version: 0.0.0.9000
-Authors@R:
+Authors@R: c(
     person("Muhammad Aimal", "Rehman", email = "rehman.aimal@gmail.com",
-           role = c("aut", "cre"))
+           role = c("aut", "cre")),
+    person("Zhili", "Lu", role = "aut"),
+    person("Chi-Kuang", "Yeh", role = "aut")
+    )
 Description: Tools for data ingestion, embedding storage, retrieval-augmented
-    generation (RAG), and evaluation for question answering systems using
-    OpenAI models and a simple R-native vector store.
+    generation (RAG), and LLM-scored RAGAS-style evaluation for question
+    answering systems using OpenAI models and a simple R-native vector store.
 License: GPL-3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -19,8 +22,7 @@ Imports:
     jsonlite,
     pdftools,
     readtext,
-    tibble,
-    ggplot2
+    tibble
 Suggests:
     plumber,
     stringr,

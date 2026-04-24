@@ -17,7 +17,7 @@ save_qa_log(qa_log, path = "db/qa_log.rds")
 Invisibly, the path to the saved file.
 }
 \description{
-This helper saves a QA log tibble (as produced by \code{\link[=log_rag_interaction]{log_rag_interaction()}})
+This helper saves a QA log tibble, as produced by \code{\link[=log_rag_interaction]{log_rag_interaction()}},
 to an RDS file. By default, it writes to \code{db/qa_log.rds} inside the
 project directory.
 }

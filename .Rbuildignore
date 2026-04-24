@@ -1,4 +1,11 @@
 ^renv$
 ^renv\.lock$
+^\.Rprofile$
+^\.Rproj\.user$
+^\.Rhistory$
+^\.RData$
+^\.DS_Store$
 ^data-raw$
 ^db$
+^reports$
+^scripts/dev$

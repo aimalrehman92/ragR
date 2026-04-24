@@ -1,9 +1,14 @@
 .Rhistory
 .RData
+.Ruserdata
+.Rproj.user/
 .DS_Store
+
 db/*.rds
 db/*.csv
 db/*.jsonl
 db/backups/*
+db/chroma/*
+
 reports/ragas/
 data-raw/*

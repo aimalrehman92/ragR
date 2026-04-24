@@ -15,7 +15,7 @@ compute_ragas_metrics_llm(
 \arguments{
 \item{qa_log}{A tibble created and populated by \code{\link[=log_rag_interaction]{log_rag_interaction()}}.}
 
-\item{judge_model}{Character scalar; judge model name (default: "gpt-4o-mini").}
+\item{judge_model}{Character scalar; judge model name.}
 
 \item{seed}{Optional integer forwarded to judge model calls.}
 

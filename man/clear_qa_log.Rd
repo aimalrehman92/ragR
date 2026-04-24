@@ -7,14 +7,14 @@
 clear_qa_log(path = "db/qa_log.rds")
 }
 \arguments{
-\item{path}{Character scalar; path to the QA log RDS file. Defaults
-to \code{"db/qa_log.rds"}.}
+\item{path}{Character scalar; path to the QA log RDS file. Defaults to
+\code{"db/qa_log.rds"}.}
 }
 \value{
 Invisibly, the path to the saved file.
 }
 \description{
-This helper overwrites the QA log file with an empty QA log (as
-created by \code{\link[=qa_log_empty]{qa_log_empty()}}). It is intended for starting a fresh
-evaluation session.
+This helper overwrites the QA log file with an empty QA log, as created
+by \code{\link[=qa_log_empty]{qa_log_empty()}}. It is intended for starting a fresh evaluation
+session.
 }

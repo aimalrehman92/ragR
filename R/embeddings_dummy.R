@@ -1,6 +1,6 @@
 # R/embeddings_dummy.R
 
-# Internal deterministic embedding generator (proxy / offline mode).
+# Internal deterministic embedding generator for offline development/testing.
 # Not exported; used for tests or when OpenAI is unavailable.
 dummy_embeddings <- function(texts, dims = 32L) {
   texts <- as.character(texts)

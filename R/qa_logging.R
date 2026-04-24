@@ -10,7 +10,7 @@ qa_log_empty <- function() {
   tibble::tibble(
     qa_id            = integer(),
     question         = character(),
-    prompt_final     = character(),   # <-- NEW: final prompt sent to the model
+    prompt_final     = character(),
     answer_model     = character(),
     answer_reference = character(),
     collection       = character(),
@@ -28,7 +28,8 @@ qa_log_empty <- function() {
 #'
 #' @param qa_log Existing QA log tibble, or NULL.
 #' @param question Character scalar.
-#' @param rag_result List returned by query_rag() (must include `answer`; may include `retrieved` and `prompt`).
+#' @param rag_result List returned by [query_rag()]. Must include `answer`;
+#'   may include `retrieved` and `prompt`.
 #' @param collection Collection name used for retrieval.
 #' @param chat_model Chat model name.
 #' @param embedding_model Embedding model name.
@@ -47,12 +48,10 @@ log_rag_interaction <- function(
   qa_id           = NULL,
   timestamp       = Sys.time()
 ) {
-  # Initialise log if NULL
   if (is.null(qa_log)) {
     qa_log <- qa_log_empty()
   }
 
-  # Basic checks
   if (!tibble::is_tibble(qa_log)) {
     stop("qa_log must be a tibble or NULL.", call. = FALSE)
   }
@@ -62,49 +61,73 @@ log_rag_interaction <- function(
   if (!is.list(rag_result) || is.null(rag_result$answer)) {
     stop("rag_result must be a list returned by query_rag() with an 'answer' element.", call. = FALSE)
   }
+  if (!is.character(collection) || length(collection) != 1L || !nzchar(collection)) {
+    stop("collection must be a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.character(chat_model) || length(chat_model) != 1L || !nzchar(chat_model)) {
+    stop("chat_model must be a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.character(embedding_model) || length(embedding_model) != 1L || !nzchar(embedding_model)) {
+    stop("embedding_model must be a single non-empty character string.", call. = FALSE)
+  }
 
-  # Extract retrieved context from rag_result$retrieved if present
+  # Backward compatibility for older QA logs.
+  if (!("prompt_final" %in% names(qa_log))) {
+    qa_log$prompt_final <- NA_character_
+  }
+
   retrieved_ids   <- character(0L)
   retrieved_texts <- character(0L)
 
   if (!is.null(rag_result$retrieved)) {
     retr <- rag_result$retrieved
+
     if (is.data.frame(retr)) {
       if ("id" %in% names(retr)) {
         retrieved_ids <- as.character(retr$id)
       }
+
       if ("text" %in% names(retr)) {
         retrieved_texts <- as.character(retr$text)
+      } else if ("document" %in% names(retr)) {
+        retrieved_texts <- as.character(retr$document)
       }
     }
   }
 
-  # Extract final prompt from rag_result$prompt if present
   prompt_final <- NA_character_
-  if (!is.null(rag_result$prompt) && is.character(rag_result$prompt) && length(rag_result$prompt) >= 1L) {
+  if (!is.null(rag_result$prompt) &&
+      is.character(rag_result$prompt) &&
+      length(rag_result$prompt) >= 1L) {
     prompt_final <- as.character(rag_result$prompt[[1]])
   }
 
-  # Compute qa_id if not supplied
   if (is.null(qa_id)) {
     if (nrow(qa_log) == 0L || !("qa_id" %in% names(qa_log))) {
       qa_id <- 1L
     } else {
-      current_ids <- qa_log$qa_id
-      if (all(is.na(current_ids))) {
+      current_ids <- suppressWarnings(as.integer(qa_log$qa_id))
+
+      if (length(current_ids) == 0L || all(is.na(current_ids))) {
         qa_id <- 1L
       } else {
         qa_id <- max(current_ids, na.rm = TRUE) + 1L
       }
     }
+  } else {
+    if (!is.numeric(qa_id) || length(qa_id) != 1L || is.na(qa_id) || qa_id <= 0) {
+      stop("qa_id must be NULL or a single positive integer.", call. = FALSE)
+    }
+
+    qa_id <- as.integer(qa_id)
   }
 
   new_row <- tibble::tibble(
     qa_id            = as.integer(qa_id),
     question         = question,
-    prompt_final     = prompt_final,                 # <-- NEW
+    prompt_final     = prompt_final,
     answer_model     = as.character(rag_result$answer),
-    answer_reference = NA_character_,                # you can fill this in later
+    answer_reference = NA_character_,
     collection       = collection,
     retrieved_ids    = list(retrieved_ids),
     retrieved_texts  = list(retrieved_texts),

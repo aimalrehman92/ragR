@@ -20,7 +20,8 @@ log_rag_interaction(
 
 \item{question}{Character scalar.}
 
-\item{rag_result}{List returned by query_rag() (must include \code{answer}; may include \code{retrieved} and \code{prompt}).}
+\item{rag_result}{List returned by \code{\link[=query_rag]{query_rag()}}. Must include \code{answer};
+may include \code{retrieved} and \code{prompt}.}
 
 \item{collection}{Collection name used for retrieval.}
 

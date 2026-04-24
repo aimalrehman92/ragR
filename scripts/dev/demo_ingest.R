@@ -7,63 +7,82 @@
 #   Rscript scripts/dev/demo_ingest.R
 #
 # Notes:
+#   - Set `input_paths` to the files you want to ingest.
+#   - Supported file types depend on ingest_documents().
+#   - PDF ingestion may require the optional pdftools/poppler setup.
 #   - Set `chunking_strategy` to "character" or "sentence".
-#   - Embeddings are computed in batches by default (robust for large corpora).
-#   - Ingestion is resumable via a local checkpoint (can be disabled).
+#   - Embeddings are computed in batches by default.
+#   - Ingestion is resumable via a local checkpoint.
 #   - This script only performs ingestion; it does not ask questions.
 
 library(ragR)
 
 # ---------------- User settings ----------------
 
-collection_name   <- "default"
+collection_name <- "default"
+
+# Files to ingest.
+# Use paths relative to the project root.
+input_paths <- c(
+  # "data-raw/social_media policy brief.pdf"
+  "data-raw/Anatomy_Gray.txt"
+)
 
 # Choose one: "character" or "sentence"
 chunking_strategy <- "character"
 
-# Only used for character chunking:
-chunk_size    <- 3200L
+# Only used for character chunking
+chunk_size    <- 1600L
 chunk_overlap <- as.integer(round(0.30 * chunk_size))
 
-embedding_model  <- "text-embedding-3-small"
+embedding_model <- "text-embedding-3-small"
 
-# Robust defaults (recommended)
-embedding_batch_size  <- 128L     # batches per embeddings request (internally capped)
-embedding_max_chars   <- 8000L    # truncate each chunk to this many chars before embedding
-retry                 <- TRUE
-max_retries           <- 5L
-resume                <- TRUE     # use a local checkpoint to skip already-embedded chunks
+# Robust defaults
+embedding_batch_size <- 128L
+embedding_max_chars  <- 8000L
+retry                <- TRUE
+max_retries          <- 5L
+resume               <- TRUE
 
-# Optional: explicit checkpoint path (leave NULL to use tempdir())
-checkpoint_path       <- NULL
-
-example_paths <- c(
-  "data-raw/Math 8600 Syllabus.pdf",
-  "data-raw/STAT8670_syllabus_Sep2.pdf",
-  "data-raw/Stat8760Syllabus.pdf",
-  "data-raw/Syllabus_STAT8672_Lin_Spring2026.pdf",
-  "data-raw/Syllabus4752_6752_Lin_Fall2025.pdf"
-)
+# Optional: explicit checkpoint path. Leave NULL to use tempdir().
+checkpoint_path <- NULL
 
 # -----------------------------------------------
 
-existing_paths <- example_paths[file.exists(example_paths)]
+existing_paths <- input_paths[file.exists(input_paths)]
+missing_paths  <- setdiff(input_paths, existing_paths)
 
 if (length(existing_paths) == 0L) {
   stop(
-    "No example files found. Please check that the paths exist under data-raw/ ",
+    "No input files found. Please check the paths in `input_paths`.",
     call. = FALSE
   )
 }
 
-cat("Ingesting the following files:\n")
-print(existing_paths)
-cat("\nCollection:", collection_name, "\n")
-cat("Chunking strategy:", chunking_strategy, "\n")
-cat("Embedding model:", embedding_model, "\n")
-cat("Embedding batch size:", embedding_batch_size, "\n")
-cat("Embedding max chars:", embedding_max_chars, "\n")
-cat("Resume:", resume, "\n\n")
+if (length(missing_paths) > 0L) {
+  warning(
+    "Some input files were not found and will be skipped: ",
+    paste(missing_paths, collapse = ", "),
+    call. = FALSE
+  )
+}
+
+cat("Ingestion settings:\n")
+cat("  Collection            :", collection_name, "\n")
+cat("  Chunking strategy     :", chunking_strategy, "\n")
+cat("  Chunk size            :", chunk_size, "\n")
+cat("  Chunk overlap         :", chunk_overlap, "\n")
+cat("  Embedding model       :", embedding_model, "\n")
+cat("  Embedding batch size  :", embedding_batch_size, "\n")
+cat("  Embedding max chars   :", embedding_max_chars, "\n")
+cat("  Resume                :", resume, "\n")
+cat("  Files found           :", length(existing_paths), "\n\n")
+
+cat("Files to ingest:\n")
+for (path in existing_paths) {
+  cat("  -", path, "\n")
+}
+cat("\n")
 
 ingestion_result <- ingest_documents(
   paths                = existing_paths,
@@ -81,7 +100,22 @@ ingestion_result <- ingest_documents(
   verbose              = TRUE
 )
 
-cat("\nIngestion finished.\n")
-print(ingestion_result)
-cat("\nCollection used:", collection_name, "\n")
-cat("Chunking strategy used:", chunking_strategy, "\n")
+cat("\nIngestion finished successfully.\n")
+
+if (is.list(ingestion_result)) {
+  if (!is.null(ingestion_result$collection)) {
+    cat("Collection:", ingestion_result$collection, "\n")
+  } else {
+    cat("Collection:", collection_name, "\n")
+  }
+
+  if (!is.null(ingestion_result$n_documents)) {
+    cat("Documents ingested:", ingestion_result$n_documents, "\n")
+  }
+
+  if (!is.null(ingestion_result$n_chunks)) {
+    cat("Chunks ingested:", ingestion_result$n_chunks, "\n")
+  }
+} else {
+  cat("Collection:", collection_name, "\n")
+}

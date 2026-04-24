@@ -9,9 +9,11 @@ get_openai_embeddings(texts, model = "text-embedding-3-small", api_key = NULL)
 \arguments{
 \item{texts}{Character vector of texts to embed.}
 
-\item{model}{Character scalar; embedding model name (e.g., "text-embedding-3-small").}
+\item{model}{Character scalar; embedding model name, e.g.,
+\code{"text-embedding-3-small"}.}
 
-\item{api_key}{OpenAI API key. If NULL, uses the OPENAI_API_KEY environment variable.}
+\item{api_key}{OpenAI API key. If NULL, uses the \code{OPENAI_API_KEY}
+environment variable.}
 }
 \value{
 A numeric matrix with one row per input text.

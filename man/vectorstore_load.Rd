@@ -7,8 +7,7 @@
 vectorstore_load()
 }
 \value{
-A tibble with one row per stored chunk (or zero rows if the
-store is empty).
+A tibble with one row per stored chunk, or zero rows if the store is empty.
 }
 \description{
 This function loads the current contents of the R-native vector store

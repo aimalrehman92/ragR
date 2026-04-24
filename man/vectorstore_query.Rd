@@ -14,14 +14,7 @@ vectorstore_query(collection, query_embedding, top_k = 4L)
 \item{top_k}{Integer; number of neighbors to retrieve.}
 }
 \value{
-A tibble with at least:
-\itemize{
-\item \code{collection}
-\item \code{id}
-\item \code{text}
-\item \code{score} (similarity)
-\item \code{metadata}
-}
+A tibble with columns \code{collection}, \code{id}, \code{text}, \code{score}, and \code{metadata}.
 }
 \description{
 Query the R-native vector store for nearest neighbors

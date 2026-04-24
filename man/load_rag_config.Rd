@@ -7,14 +7,12 @@
 load_rag_config(path = NULL)
 }
 \arguments{
-\item{path}{Optional path to a YAML config file. If NULL, a default
-location may be used in the future.}
+\item{path}{Optional path to a YAML config file. Currently unused.}
 }
 \value{
-A list of configuration values.
+A list of configuration values. Currently returns an empty list.
 }
 \description{
 Placeholder for a configuration loader. In the future, this can read
-a YAML file (e.g., from inst/config) and merge it with environment
-variables and defaults.
+a YAML file and merge it with environment variables and defaults.
 }

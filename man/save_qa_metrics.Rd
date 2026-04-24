@@ -16,7 +16,7 @@ save_qa_metrics(qa_metrics, path = "db/qa_metrics.rds")
 Invisibly, the path to the saved file.
 }
 \description{
-This helper saves a QA metrics tibble (as produced by
-\code{\link[=compute_ragas_metrics]{compute_ragas_metrics()}}) to an RDS file. By default, it writes to
+This helper saves a QA metrics tibble, as produced by
+\code{\link[=compute_ragas_metrics]{compute_ragas_metrics()}}, to an RDS file. By default, it writes to
 \code{db/qa_metrics.rds} inside the project directory.
 }

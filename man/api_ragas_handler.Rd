@@ -4,13 +4,14 @@
 \alias{api_ragas_handler}
 \title{API handler: compute RAGAS metrics and summary from saved QA log}
 \usage{
-api_ragas_handler(path = "db/qa_log.rds", mode = NULL)
+api_ragas_handler(path = "db/qa_log.rds", judge_model = "gpt-4o-mini")
 }
 \arguments{
 \item{path}{Character scalar; path to the QA log RDS file. Defaults to
 \code{"db/qa_log.rds"}.}
 
-\item{mode}{\code{"approx"} or \code{"llm"}. If NULL, uses option \code{ragR.ragas_mode}.}
+\item{judge_model}{Character scalar; judge model used for LLM-scored metrics.
+Defaults to \code{"gpt-4o-mini"}.}
 }
 \value{
 A list with \code{status}, \code{n_qa}, \code{metrics}, \code{summary}.

@@ -6,15 +6,16 @@
 \alias{ragR-package}
 \title{ragR: Retrieval-Augmented Generation + RAGAS Evaluation in R}
 \description{
-The \strong{ragR} package provides a complete Retrieval-Augmented Generation
-(RAG) system implemented in R. It includes:
+The \strong{ragR} package provides a Retrieval-Augmented Generation (RAG)
+system implemented in R. It includes:
 \itemize{
 \item A data ingestion pipeline for PDF, text, and Word documents
 \item An R-native vector store for chunk embeddings
 \item A configurable RAG pipeline that uses OpenAI embeddings and chat models
 \item Persistent QA logging for reproducible evaluation
-\item RAGAS-style metrics (context precision/recall, relevance, faithfulness)
-\item A Plumber-based HTTP API suitable for chatbot frontends
+\item LLM-scored RAGAS-style metrics, including context precision, context
+recall, answer relevance, and faithfulness
+\item A Plumber-based HTTP API suitable for chatbot and evaluation frontends
 }
 }
 \section{Architecture}{
@@ -24,11 +25,12 @@ The package is organized into several modules:
 \itemize{
 \item \strong{Ingestion (\code{ingestion_files.R})}
 Extracts text from PDF/TXT/DOCX files, chunks it, and prepares data
-for embedding and storage.
+for embedding and storage. Ingestion is handled through package functions
+and development scripts, not through the minimal HTTP API.
 \item \strong{Embeddings & Chat (\code{embeddings_openai.R})}
-Wraps the OpenAI REST API for embeddings (e.g.
-\code{"text-embedding-3-small"}) and chat completion models (e.g.
-\code{"gpt-4o-mini"}). Reads the API key from \code{OPENAI_API_KEY}.
+Wraps the OpenAI REST API for embeddings, such as
+\code{"text-embedding-3-small"}, and chat models, such as
+\code{"gpt-4o-mini"}. Reads the API key from \code{OPENAI_API_KEY}.
 \item \strong{Vector Store (\code{vectorstore_interface.R})}
 Implements an R-native vector store using tibbles and numeric matrices,
 with functions to add, query, and clear stored embeddings.
@@ -39,21 +41,21 @@ Given a user question, the pipeline:
 \enumerate{
 \item Computes an embedding for the question
 \item Retrieves top-k similar chunks from the vector store
-\item Builds a context-aware prompt
+\item Builds a grounded context-aware prompt
 \item Calls the OpenAI chat model to generate an answer
 }
-\item \strong{QA Logging & Persistence (\code{qa_persistence.R})}
-Stores each interaction in \code{db/qa_log.rds}, including question, model
-answer, retrieved chunks, model names, and timestamps. Provides helpers
-to load, save, and clear logs.
+\item \strong{QA Logging & Persistence (\code{qa_logging.R}, \code{qa_persistence.R})}
+Stores each interaction in \code{db/qa_log.rds}, including the question, model
+answer, retrieved chunks, final grounded prompt, model names, and
+timestamps. Provides helpers to load, save, and clear logs.
 \item \strong{RAGAS Metrics & Summary (\code{ragas_metrics.R}, \code{ragas_summary.R})}
-Computes simple RAGAS-style metrics (context precision/recall, answer
-relevance, faithfulness, and an overall score) and summarizes them
-across all QA pairs.
+Computes LLM-scored RAGAS-style metrics, including context precision,
+context recall, answer relevance, faithfulness, and an overall score.
+Provides summary helpers for aggregating metric results across QA pairs.
 \item \strong{Reports (\code{ragas_report.R})}
 Generates a performance report by:
 \itemize{
-\item Computing metrics from the QA log
+\item Computing LLM-scored metrics from the QA log
 \item Saving \code{db/qa_metrics.rds}
 \item Writing \code{reports/ragas/ragas_summary.csv}
 \item Writing a bar chart of mean metrics to
@@ -73,19 +75,18 @@ When \code{scripts/dev/run_api.R} is executed, a Plumber server exposes:
 \item \code{POST /chat}
 Runs the RAG pipeline for a user question and logs the result into
 \code{db/qa_log.rds}.
-\item \code{POST /ingest}
-Ingests one or more documents into the vector store.
-\item \code{POST /clear}
-Clears the vector store.
 \item \code{GET /ragas}
-Returns RAGAS-style metrics for each logged QA pair.
+Computes and returns LLM-scored RAGAS-style metrics and a summary for
+the logged QA pairs.
 \item \code{POST /ragas/report}
-Computes metrics from the QA log, saves the metrics and report
+Computes LLM-scored metrics from the QA log, saves the metrics and report
 artifacts to disk, and returns a small summary object.
 \item \code{POST /ragas/clear}
 Clears the QA log, QA metrics, and report files.
+\item \code{POST /clear}
+Clears one vector-store collection.
 \item \code{POST /clear_all}
-Clears the entire vector store (all collections). Uses
+Clears the entire vector store across all collections. Uses
 \code{\link[=api_clear_all_handler]{api_clear_all_handler()}}, which calls \code{\link[=vectorstore_clear_all]{vectorstore_clear_all()}}.
 }
 }
@@ -99,11 +100,12 @@ Programmatic usage inside R:
 
 # Run a RAG query
 res <- query_rag(
-  question        = "What is this essay about?",
-  collection      = "demo_ingest_test",
-  top_k           = 2,
+  question        = "What is this document about?",
+  collection      = "default",
+  top_k           = 5,
   embedding_model = "text-embedding-3-small",
-  chat_model      = "gpt-4o-mini"
+  chat_model      = "gpt-4o-mini",
+  system_prompt   = "You are a helpful assistant."
 )
 
 cat(res$answer)
@@ -117,13 +119,21 @@ source("scripts/dev/run_api.R")
 }\if{html}{\out{</div>}}
 }
 
-\section{Author}{
+\section{Authors}{
 
 Muhammad Aimal Rehman
+Zhili Lu
+Chi-Kuang Yeh
 }
 
 \author{
 \strong{Maintainer}: Muhammad Aimal Rehman \email{rehman.aimal@gmail.com}
+
+Authors:
+\itemize{
+  \item Zhili Lu
+  \item Chi-Kuang Yeh
+}
 
 }
 \keyword{NLP}

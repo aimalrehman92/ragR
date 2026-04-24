@@ -8,7 +8,7 @@ api_ragas_report_handler(
   qa_log_path = "db/qa_log.rds",
   qa_metrics_path = "db/qa_metrics.rds",
   output_dir = "reports/ragas",
-  mode = NULL
+  judge_model = "gpt-4o-mini"
 )
 }
 \arguments{
@@ -21,10 +21,12 @@ Defaults to \code{"db/qa_metrics.rds"}.}
 \item{output_dir}{Character scalar; directory where outputs are written.
 Defaults to \code{"reports/ragas"}.}
 
-\item{mode}{\code{"approx"} or \code{"llm"}. If NULL, uses option \code{ragR.ragas_mode}.}
+\item{judge_model}{Character scalar; judge model used for LLM-scored metrics.
+Defaults to \code{"gpt-4o-mini"}.}
 }
 \value{
-A list: \code{status}, \code{n_qa}, \code{qa_metrics_path}, \code{summary_csv_path}, \code{plot_path}.
+A list with \code{status}, \code{n_qa}, \code{qa_metrics_path},
+\code{summary_csv_path}, and \code{plot_path}.
 }
 \description{
 API handler: generate RAGAS performance report

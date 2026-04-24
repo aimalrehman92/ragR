@@ -12,6 +12,5 @@ JSON serialization.
 }
 \description{
 This handler wipes the R-native vector store by calling
-\code{\link[=vectorstore_clear_all]{vectorstore_clear_all()}}, removing all collections and stored
-embeddings.
+\code{\link[=vectorstore_clear_all]{vectorstore_clear_all()}}, removing all collections and stored embeddings.
 }

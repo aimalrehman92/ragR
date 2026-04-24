@@ -15,6 +15,5 @@ A tibble containing the QA metrics.
 }
 \description{
 This helper loads QA metrics from an RDS file. If the file does not
-exist, it returns an empty metrics tibble created by
-\code{\link[=qa_metrics_empty]{qa_metrics_empty()}}.
+exist, it returns an empty metrics tibble created by \code{\link[=qa_metrics_empty]{qa_metrics_empty()}}.
 }

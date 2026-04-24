@@ -4,17 +4,15 @@
 \alias{build_rag_prompt}
 \title{Build a RAG prompt from question and retrieved chunks}
 \usage{
-build_rag_prompt(question, retrieved, system_prompt = "")
+build_rag_prompt(question, retrieved)
 }
 \arguments{
 \item{question}{Character scalar.}
 
 \item{retrieved}{A tibble/data frame of retrieved chunks.}
-
-\item{system_prompt}{Character; system instruction prepended to the prompt.}
 }
 \value{
-Character scalar: the constructed prompt.
+Character scalar: the constructed grounded RAG prompt.
 }
 \description{
 Build a RAG prompt from question and retrieved chunks
