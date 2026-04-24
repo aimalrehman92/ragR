@@ -1,3 +1,107 @@
+# R/api_handlers.R
+
+#' API handler: chat with the RAG pipeline
+#'
+#' This handler receives a parsed JSON request body, runs the RAG pipeline,
+#' appends the interaction to the QA log, and returns the model answer.
+#'
+#' @param body Parsed JSON request body.
+#'
+#' @return A list suitable for JSON serialization.
+#' @export
+api_chat_handler <- function(body) {
+  if (is.null(body) || !is.list(body)) {
+    stop("Request body must be a JSON object.", call. = FALSE)
+  }
+
+  question <- body$question
+  if (is.null(question) || !is.character(question) || length(question) != 1L || !nzchar(question)) {
+    stop("Request body must include a non-empty 'question' field.", call. = FALSE)
+  }
+
+  collection <- body$collection %||% "default"
+  top_k <- body$top_k %||% 5L
+  score_threshold <- body$score_threshold %||% 0
+
+  embedding_model <- body$embedding_model %||% "text-embedding-3-small"
+  chat_model <- body$chat_model %||% "gpt-4o-mini"
+
+  temperature <- body$temperature %||% 0
+  max_output_tokens <- body$max_output_tokens %||% 10000L
+
+  system_prompt <- body$system_prompt %||% "You are a helpful assistant."
+
+  qa_log_path <- body$qa_log_path %||% "db/qa_log.rds"
+
+  res <- query_rag(
+    question          = question,
+    collection        = collection,
+    top_k             = as.integer(top_k),
+    embedding_model   = embedding_model,
+    chat_model        = chat_model,
+    temperature       = temperature,
+    max_output_tokens = if (is.null(max_output_tokens)) NULL else as.integer(max_output_tokens),
+    score_threshold   = score_threshold,
+    system_prompt     = system_prompt
+  )
+
+  qa_log <- load_qa_log(qa_log_path)
+
+  qa_log <- log_rag_interaction(
+    qa_log          = qa_log,
+    question        = question,
+    rag_result      = res,
+    collection      = collection,
+    chat_model      = chat_model,
+    embedding_model = embedding_model
+  )
+
+  save_qa_log(qa_log, qa_log_path)
+
+  list(
+    status    = "ok",
+    qa_id     = tail(qa_log$qa_id, 1L),
+    question  = question,
+    answer    = res$answer,
+    retrieved = res$retrieved
+  )
+}
+
+
+#' API handler: clear one vector-store collection
+#'
+#' This handler deletes one collection from the R-native vector store.
+#' If no collection is supplied, `"default"` is used.
+#'
+#' @param body Parsed JSON request body, or NULL.
+#'
+#' @return A list with `status`, `collection`, and `message`.
+#' @export
+api_clear_handler <- function(body = NULL) {
+  if (!is.null(body) && !is.list(body)) {
+    stop("Request body must be a JSON object or empty.", call. = FALSE)
+  }
+
+  collection <- "default"
+
+  if (!is.null(body) && !is.null(body$collection)) {
+    collection <- body$collection
+  }
+
+  if (!is.character(collection) || length(collection) != 1L || !nzchar(collection)) {
+    stop("'collection' must be a single non-empty character string.", call. = FALSE)
+  }
+
+  vectorstore_delete_collection(collection)
+
+  list(
+    status     = "ok",
+    collection = collection,
+    message    = paste0("Vector store collection cleared: ", collection)
+  )
+}
+
+
 #' API handler: compute RAGAS metrics and summary from saved QA log
 #'
 #' @param path Character scalar; path to the QA log RDS file. Defaults to

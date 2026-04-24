@@ -38,7 +38,7 @@ api$filter("cors", function(req, res) {
 # -----------------------------------------------------------------------------
 # NOTE: document ingestion is handled through scripts/dev/demo_ingest.R.
 
-api$handle("POST", "/chat",  source("inst/api/pr_chat.R")[[1]])
+api$handle("POST", "/chat", source("inst/api/pr_chat.R")[[1]])
 api$handle("POST", "/clear", source("inst/api/pr_clear.R")[[1]])
 
 api$handle("POST", "/clear_all", function(req, res) {
@@ -62,6 +62,22 @@ api$handle("POST", "/ragas/report", function(req, res) {
 # RAGAS: clear QA log, QA metrics, and report files
 api$handle("POST", "/ragas/clear", function(req, res) {
   ragR::api_ragas_clear_handler()
+})
+
+# RAGAS: serve the latest generated metrics plot
+api$handle("GET", "/ragas/plot", function(req, res) {
+  plot_path <- file.path("reports", "ragas", "ragas_means.png")
+
+  if (!file.exists(plot_path)) {
+    res$status <- 404
+    return(list(
+      status  = "error",
+      message = "RAGAS plot not found. Run /ragas/report first."
+    ))
+  }
+
+  res$setHeader("Content-Type", "image/png")
+  readBin(plot_path, what = "raw", n = file.info(plot_path)$size)
 })
 
 cat("Starting ragR API...\n")

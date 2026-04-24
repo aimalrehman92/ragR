@@ -24,20 +24,21 @@ collection_name <- "default"
 # Files to ingest.
 # Use paths relative to the project root.
 input_paths <- c(
-  # "data-raw/social_media policy brief.pdf"
+  # "data-raw/social_media policy brief.pdf",
+  "data-raw/Anatomy_Gray.txt",
   "data-raw/Anatomy_Gray.txt"
 )
 
 # Choose one: "character" or "sentence"
 chunking_strategy <- "character"
 
-# Only used for character chunking
+# Only used for character chunking.
 chunk_size    <- 1600L
 chunk_overlap <- as.integer(round(0.30 * chunk_size))
 
 embedding_model <- "text-embedding-3-small"
 
-# Robust defaults
+# Robust defaults.
 embedding_batch_size <- 128L
 embedding_max_chars  <- 8000L
 retry                <- TRUE
@@ -50,7 +51,7 @@ checkpoint_path <- NULL
 # -----------------------------------------------
 
 existing_paths <- input_paths[file.exists(input_paths)]
-missing_paths  <- setdiff(input_paths, existing_paths)
+missing_paths  <- input_paths[!file.exists(input_paths)]
 
 if (length(existing_paths) == 0L) {
   stop(
@@ -102,20 +103,14 @@ ingestion_result <- ingest_documents(
 
 cat("\nIngestion finished successfully.\n")
 
-if (is.list(ingestion_result)) {
-  if (!is.null(ingestion_result$collection)) {
-    cat("Collection:", ingestion_result$collection, "\n")
-  } else {
-    cat("Collection:", collection_name, "\n")
-  }
-
-  if (!is.null(ingestion_result$n_documents)) {
-    cat("Documents ingested:", ingestion_result$n_documents, "\n")
-  }
-
-  if (!is.null(ingestion_result$n_chunks)) {
-    cat("Chunks ingested:", ingestion_result$n_chunks, "\n")
-  }
+if (is.list(ingestion_result) && "collection" %in% names(ingestion_result)) {
+  cat("Collection:", ingestion_result[["collection"]], "\n")
 } else {
   cat("Collection:", collection_name, "\n")
+}
+
+cat("Documents ingested:", length(existing_paths), "\n")
+
+if (is.list(ingestion_result) && "n_chunks" %in% names(ingestion_result)) {
+  cat("Chunks ingested:", ingestion_result[["n_chunks"]], "\n")
 }
