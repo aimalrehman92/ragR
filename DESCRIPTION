@@ -1,17 +1,22 @@
 Package: ragR
 Title: Retrieval-Augmented Generation and RAG Evaluation Tools in R
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: c(
     person("Muhammad Aimal", "Rehman", email = "rehman.aimal@gmail.com",
            role = c("aut", "cre")),
     person("Zhili", "Lu", role = "aut"),
     person("Chi-Kuang", "Yeh", role = "aut")
     )
-Description: Tools for data ingestion, embedding storage, retrieval-augmented
-    generation (RAG), and LLM-scored RAGAS-style evaluation for question
-    answering systems using OpenAI models and a simple R-native vector store.
+Description: Provides tools for document ingestion, embedding storage,
+    retrieval-augmented generation (RAG), and RAG evaluation for question
+    answering systems. The package includes an R-native vector store, wrappers
+    for OpenAI embedding and chat-completion APIs, QA logging utilities, and
+    LLM-scored RAGAS-style evaluation metrics.
 License: GPL-3
+URL: https://github.com/aimalrehman92/ragR
+BugReports: https://github.com/aimalrehman92/ragR/issues
 Encoding: UTF-8
+Language: en-US
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Depends:

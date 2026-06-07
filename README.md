@@ -621,14 +621,6 @@ reports/ragas/ragas_means.png
 
 ---
 
-## Authors
-
-- Muhammad Aimal Rehman
-- Zhili Lu
-- Chi-Kuang Yeh
-
----
-
 ## License
 
 GPL-3

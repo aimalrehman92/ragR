@@ -1,22 +1,11 @@
-test_that("chunk_text produces non-empty chunks", {
-  skip_if_not(exists("chunk_text"), "chunk_text() not defined")
-
-  text <- paste(rep(letters, each = 10), collapse = " ")
-
-  chunks <- chunk_text(
-    text,
-    chunk_size    = 100,
-    chunk_overlap = 20
-  )
-
-  # Accept either a character vector, or a data frame / tibble with a 'text' column
-  if (is.character(chunks)) {
-    expect_true(length(chunks) >= 1)
-    expect_true(all(nchar(chunks) > 0))
-  } else if (is.data.frame(chunks) || tibble::is_tibble(chunks)) {
-    expect_true(nrow(chunks) >= 1)
-    expect_true(all(nchar(chunks$text) > 0))
-  } else {
-    fail("chunk_text() returned an unsupported type")
-  }
-})
+# tests/testthat/test_chunking.R
+#
+# This file intentionally contains no active tests.
+#
+# The previous version tested chunk_text(), but that function is not currently
+# defined/exported in ragR. Keeping a skipped test for a missing function makes
+# the CRAN test suite look unfinished.
+#
+# Add chunking tests here later only after there is a stable package function
+# for chunking that can be tested deterministically without API calls,
+# internet access, or local project-state dependencies.

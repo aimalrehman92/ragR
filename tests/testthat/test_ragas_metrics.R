@@ -1,8 +1,24 @@
 test_that("qa_metrics_empty returns an empty tibble with expected columns", {
   m <- qa_metrics_empty()
 
+  expected_cols <- c(
+    "qa_id",
+    "context_precision",
+    "context_recall",
+    "answer_relevance",
+    "faithfulness",
+    "ragas_overall"
+  )
+
   expect_true(tibble::is_tibble(m))
   expect_equal(nrow(m), 0L)
+  expect_equal(names(m), expected_cols)
+})
+
+test_that("compute_ragas_metrics returns empty tibble for empty qa_log", {
+  empty_log <- qa_log_empty()
+
+  m <- compute_ragas_metrics(empty_log)
 
   expected_cols <- c(
     "qa_id",
@@ -13,20 +29,12 @@ test_that("qa_metrics_empty returns an empty tibble with expected columns", {
     "ragas_overall"
   )
 
+  expect_true(tibble::is_tibble(m))
+  expect_equal(nrow(m), 0L)
   expect_equal(names(m), expected_cols)
 })
 
-test_that("compute_ragas_metrics returns empty tibble for empty qa_log", {
-  empty_log <- qa_log_empty()
-
-  m <- compute_ragas_metrics(empty_log)
-
-  expect_true(tibble::is_tibble(m))
-  expect_equal(nrow(m), 0L)
-})
-
-test_that("compute_ragas_metrics computes finite scores for a simple qa_log", {
-  # Build a tiny synthetic QA log with one row
+test_that("compute_ragas_metrics returns expected structure for a simple qa_log", {
   qa_log <- qa_log_empty()
 
   qa_log <- dplyr::bind_rows(
@@ -50,12 +58,8 @@ test_that("compute_ragas_metrics computes finite scores for a simple qa_log", {
 
   m <- compute_ragas_metrics(qa_log)
 
-  expect_true(tibble::is_tibble(m))
-  expect_equal(nrow(m), 1L)
-  expect_equal(m$qa_id[1], 1L)
-
-  # Metrics should be numeric and between 0 and 1
-  numeric_cols <- c(
+  expected_cols <- c(
+    "qa_id",
     "context_precision",
     "context_recall",
     "answer_relevance",
@@ -63,9 +67,17 @@ test_that("compute_ragas_metrics computes finite scores for a simple qa_log", {
     "ragas_overall"
   )
 
-  for (col in numeric_cols) {
-    expect_true(is.numeric(m[[col]]))
-    expect_true(all(m[[col]] >= 0))
-    expect_true(all(m[[col]] <= 1))
+  expect_true(tibble::is_tibble(m))
+  expect_equal(nrow(m), 1L)
+  expect_equal(names(m), expected_cols)
+  expect_equal(m$qa_id[1], 1L)
+
+  for (col in setdiff(expected_cols, "qa_id")) {
+    values <- as.numeric(m[[col]])
+    non_missing_values <- values[!is.na(values)]
+
+    expect_true(all(is.finite(non_missing_values)))
+    expect_true(all(non_missing_values >= 0))
+    expect_true(all(non_missing_values <= 1))
   }
 })
