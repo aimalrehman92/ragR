@@ -12,7 +12,7 @@ It provides:
 - LLM-scored RAGAS-style evaluation metrics
 - A minimal Plumber API backend for chatbot and evaluation frontends
 
-The package is currently suitable for research, coursework, experimentation, and arXiv-level reproducibility. It is not yet prepared for CRAN submission.
+The package is designed for research, coursework, experimentation, and reproducible RAG evaluation workflows.
 
 ---
 
