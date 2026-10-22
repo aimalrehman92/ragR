@@ -626,6 +626,7 @@ reports/ragas/ragas_means.png
 - Muhammad Aimal Rehman
 - Zhili Lu
 - Chi-Kuang Yeh
+- Seoyoung Kim
 
 ---
 
