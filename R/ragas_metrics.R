@@ -101,13 +101,15 @@ ragas_generate_json <- function(
   model = "gpt-4o-mini",
   seed = NULL,
   temperature = 0,
-  max_retries = 1L
+  max_retries = 1L,
+  max_output_tokens = 4096L
 ) {
   raw <- generate_openai_chat(
     prompt = prompt,
     model = model,
     temperature = temperature,
-    seed = seed
+    seed = seed,
+    max_output_tokens = max_output_tokens
   )
 
   json_str <- extract_json_block(raw)
@@ -137,7 +139,8 @@ ragas_generate_json <- function(
     prompt = fix_prompt,
     model = model,
     temperature = temperature,
-    seed = seed
+    seed = seed,
+    max_output_tokens = max_output_tokens
   )
 
   fixed_outer_json <- extract_json_block(fixed_raw)
