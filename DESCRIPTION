@@ -1,10 +1,11 @@
 Package: ragR
 Title: Retrieval-Augmented Generation and RAG Evaluation Tools in R
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: c(
     person("Muhammad Aimal", "Rehman", email = "rehman.aimal@gmail.com",
            role = c("aut", "cre")),
     person("Zhili", "Lu", role = "aut"),
+    person("Seoyoung", "Kim", role = "aut"),
     person("Chi-Kuang", "Yeh", role = "aut")
     )
 Description: Provides tools for document ingestion, embedding storage,
