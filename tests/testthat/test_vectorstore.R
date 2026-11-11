@@ -1,80 +1,123 @@
-test_that("vectorstore_upsert and vectorstore_query work together", {
-  # Clean any existing test collection
-  vectorstore_delete_collection("test_collection")
+# tests/testthat/test_vectorstore.R
 
-  # Fake embeddings: 3 vectors, 2-dimensional
-  ids <- c("id1", "id2", "id3")
-  docs <- c("apple banana", "banana cherry", "cherry date")
-  embs <- matrix(c(
-    1,   0,
-    0.8, 0.2,
-    0,   1
-  ), nrow = 3, byrow = TRUE)
-
-  metas <- list(
-    list(path = "doc.txt", chunk_index = 1),
-    list(path = "doc.txt", chunk_index = 2),
-    list(path = "doc.txt", chunk_index = 3)
+testthat::test_that("vectorstore_upsert and vectorstore_query work together", {
+  collection <- paste0(
+    "test_collection_",
+    format(Sys.time(), "%Y%m%d%H%M%OS3"),
+    "_",
+    sample.int(1e6, 1)
   )
 
-  # Upsert into collection
-  expect_silent(
-    vectorstore_upsert(
-      collection = "test_collection",
-      ids        = ids,
-      embeddings = embs,
-      documents  = docs,
-      metadatas  = metas
+  on.exit(
+    ragR::vectorstore_delete_collection(collection),
+    add = TRUE
+  )
+
+  ragR::vectorstore_delete_collection(collection)
+
+  ids <- c("id1", "id2", "id3")
+  docs <- c("apple banana", "banana cherry", "cherry date")
+
+  embeddings <- matrix(
+    c(
+      1.0, 0.0,
+      0.8, 0.2,
+      0.0, 1.0
+    ),
+    nrow = 3,
+    byrow = TRUE
+  )
+
+  metadatas <- list(
+    list(path = "doc.txt", chunk_index = 1L),
+    list(path = "doc.txt", chunk_index = 2L),
+    list(path = "doc.txt", chunk_index = 3L)
+  )
+
+  testthat::expect_silent(
+    ragR::vectorstore_upsert(
+      collection = collection,
+      ids = ids,
+      embeddings = embeddings,
+      documents = docs,
+      metadatas = metadatas
     )
   )
 
-  # Query with a vector similar to first row
-  q <- c(1, 0)
-  res <- vectorstore_query(
-    collection      = "test_collection",
-    query_embedding = q,
-    top_k           = 2
+  result <- ragR::vectorstore_query(
+    collection = collection,
+    query_embedding = c(1, 0),
+    top_k = 2L
   )
 
-  # Check basic structure
-  expect_s3_class(res, "tbl_df")
-  expect_true(nrow(res) <= 2)
-  expect_true(all(res$collection == "test_collection"))
+  expected_cols <- c(
+    "collection",
+    "id",
+    "text",
+    "score",
+    "metadata"
+  )
 
-  # First result should be id1 (highest similarity)
-  expect_equal(res$id[1], "id1")
+  testthat::expect_true(tibble::is_tibble(result))
+  testthat::expect_true(all(expected_cols %in% names(result)))
+  testthat::expect_lte(nrow(result), 2L)
+  testthat::expect_gte(nrow(result), 1L)
+  testthat::expect_true(all(result$collection == collection))
+
+  testthat::expect_equal(result$id[[1]], "id1")
+  testthat::expect_true(all(is.finite(result$score)))
+  testthat::expect_true(is.list(result$metadata))
 })
 
-test_that("vectorstore_delete_collection removes data", {
-  # Insert small data
-  ids <- c("a", "b")
-  docs <- c("foo", "bar")
-  embs <- matrix(c(1, 0, 0, 1), nrow = 2, byrow = TRUE)
-
-  vectorstore_upsert(
-    collection = "delete_me",
-    ids        = ids,
-    embeddings = embs,
-    documents  = docs,
-    metadatas  = replicate(2, list(), simplify = FALSE)
+testthat::test_that("vectorstore_delete_collection removes collection data", {
+  collection <- paste0(
+    "delete_me_",
+    format(Sys.time(), "%Y%m%d%H%M%OS3"),
+    "_",
+    sample.int(1e6, 1)
   )
 
-  # Confirm something is there
-  res_before <- vectorstore_query(
-    collection      = "delete_me",
+  on.exit(
+    ragR::vectorstore_delete_collection(collection),
+    add = TRUE
+  )
+
+  ragR::vectorstore_delete_collection(collection)
+
+  ragR::vectorstore_upsert(
+    collection = collection,
+    ids = c("a", "b"),
+    embeddings = matrix(
+      c(
+        1, 0,
+        0, 1
+      ),
+      nrow = 2,
+      byrow = TRUE
+    ),
+    documents = c("foo", "bar"),
+    metadatas = list(list(), list())
+  )
+
+  result_before <- ragR::vectorstore_query(
+    collection = collection,
     query_embedding = c(1, 0),
-    top_k           = 2
+    top_k = 2L
   )
-  expect_true(nrow(res_before) > 0)
 
-  # Delete collection
-  expect_silent(vectorstore_delete_collection("delete_me"))
+  testthat::expect_true(tibble::is_tibble(result_before))
+  testthat::expect_gt(nrow(result_before), 0L)
 
-  # Now query should give 0 rows
-  res_after <- vectorstore_query(
-    collection      = "delete_me",
+  testthat::expect_silent(
+    ragR::vectorstore_delete_collection(collection)
+  )
+
+  result_after <- ragR::vectorstore_query(
+    collection = collection,
     query_embedding = c(1, 0),
-    top_k           = 2
+    top_k = 2L
   )
-  expect_equal(nrow(res_after), 0)
+
+  testthat::expect_true(tibble::is_tibble(result_after))
+  testthat::expect_equal(nrow(result_after), 0L)
 })

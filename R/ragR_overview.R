@@ -117,10 +117,7 @@
 #' # Visit http://127.0.0.1:8000/__docs__/ for interactive docs
 #' ```
 #'
-#' @section Authors:
-#' Muhammad Aimal Rehman  
-#' Zhili Lu  
-#' Chi-Kuang Yeh
-#'
 #' @keywords RAG NLP OpenAI RAGAS chatbot embeddings
+#'
+#' @importFrom utils tail
 "_PACKAGE"

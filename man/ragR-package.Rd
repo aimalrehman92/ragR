@@ -119,13 +119,14 @@ source("scripts/dev/run_api.R")
 }\if{html}{\out{</div>}}
 }
 
-\section{Authors}{
-
-Muhammad Aimal Rehman
-Zhili Lu
-Chi-Kuang Yeh
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/aimalrehman92/ragR}
+  \item Report bugs at \url{https://github.com/aimalrehman92/ragR/issues}
 }
 
+}
 \author{
 \strong{Maintainer}: Muhammad Aimal Rehman \email{rehman.aimal@gmail.com}
 

@@ -167,7 +167,7 @@ ingest_documents <- function(
 
   # Remove chunks already embedded (based on local checkpoint)
   if (resume && length(already_done_ids) > 0L) {
-    chunks_df <- dplyr::filter(chunks_df, !(id %in% already_done_ids))
+    chunks_df <- chunks_df[!(chunks_df$id %in% already_done_ids), , drop = FALSE]
     if (verbose) message("Chunks remaining after resume-skip: ", nrow(chunks_df))
   }
 
